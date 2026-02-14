@@ -23,6 +23,7 @@
         inherit (pkgs) lib;
       in
       {
+
         packages = {
           default = pkgs.dockerTools.buildLayeredImageWithNixDb {
             name = "nix-fast-build-action";
@@ -37,6 +38,29 @@
             };
           };
         };
+
+        apps.default = {
+          type = "app";
+          program = lib.getExe (
+            pkgs.writeShellApplication {
+              name = "ghcr push";
+              text = ''
+                nix build
+                docker load < result
+                name=ghcr.io/$GITHUB_REPOSITORY
+                for tag in $GITHUB_SHA $(git describe --tags --always) latest; do
+                  docker tag ''${GITHUB_REPOSITORY##*/}:$GITHUB_SHA $name:$tag
+                done
+                docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin <<< $GITHUB_TOKEN
+                docker push --all-tags $name
+              '';
+              excludeShellChecks = [
+                "2086" # Double quote to prevent globbing and word splitting
+              ];
+            }
+          );
+        };
+
       }
     ));
 

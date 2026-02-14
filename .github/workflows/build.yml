@@ -27,21 +27,5 @@ jobs:
           name: ${{ github.event.repository.name }}
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
-      - name: Build
-        run: nix build
-
-      - name: GHCR Login
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: GHCR Tag & Push
-        run: |-
-          docker load < result
-          name=ghcr.io/${{ github.repository }}
-          for tag in ${{ github.sha }} $(git describe --tags --always) latest; do
-            docker tag ${{ github.event.repository.name }}:${{ github.sha }} ${name}:$tag
-          done
-          docker push --all-tags ${name}
+      - name: Build, Tag, and Push
+        run: nix run
