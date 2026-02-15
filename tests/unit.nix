@@ -38,17 +38,50 @@ let
       expected = "custom.tar.gz";
     };
 
+    testInputsFromMerging = {
+      expr =
+        let
+          drv1 = pkgs.stdenv.mkDerivation {
+            pname = "test1";
+            version = "1.0";
+            buildInputs = with pkgs; [ hello ];
+          };
+          drv2 = pkgs.stdenv.mkDerivation {
+            pname = "test2";
+            version = "1.0";
+            nativeBuildInputs = with pkgs; [ ripgrep ];
+          };
+          container = nixZeroSetupLib.mkBuildContainer {
+            inherit pkgs;
+            inputsFrom = [
+              drv1
+              drv2
+            ];
+            contents = with pkgs; [ jq ];
+          };
+        in
+        container.contents;
+      expected = with pkgs; [
+        nixVersions.latest
+        bashInteractive
+        cacert
+        hello
+        ripgrep
+        jq
+      ];
+    };
+
     testContentsMerging = {
       expr =
         let
           drv = pkgs.stdenv.mkDerivation {
             pname = "test";
             version = "1.0";
-            buildInputs = [ pkgs.hello ];
+            buildInputs = with pkgs; [ hello ];
           };
           container = nixZeroSetupLib.mkBuildContainer {
             inherit pkgs drv;
-            contents = [ pkgs.jq ];
+            contents = with pkgs; [ jq ];
           };
         in
         container.contents;

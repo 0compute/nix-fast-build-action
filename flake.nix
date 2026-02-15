@@ -42,15 +42,13 @@
         packages = {
           inherit nixZeroSetupContainer;
           default = nixZeroSetupContainer;
-          example = self.lib.mkBuildContainer {
+          example = lib.mkBuildContainer {
             inherit pkgs;
             drv = pkgs.hello;
           };
         };
 
-        checks = {
-          unit = import ./tests/unit.nix { inherit pkgs; };
-        };
+        checks.unit = import ./tests/unit.nix { inherit pkgs; };
 
         apps = {
 

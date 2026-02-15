@@ -1,10 +1,10 @@
 {
   mkBuildContainer =
-    # TODO: follow inputsFrom pattern in pkgs.mkShell
     {
       pkgs,
       drv ? null,
-      name ? "${drv.pname or drv.name or "unnamed"}-build-container",
+      inputsFrom ? [ ],
+      name ? "${if drv != null then (drv.pname or drv.name or "unnamed") else "env"}-build-container",
       nix ? pkgs.nixVersions.latest,
       nixConf ? ''
         experimental-features = nix-command flakes
@@ -14,6 +14,18 @@
     let
       inherit (pkgs) lib;
 
+      allDrvs = (if drv != null then [ drv ] else [ ]) ++ inputsFrom;
+
+      extractedInputs = lib.concatMap (
+        d:
+        lib.concatMap (attr: d.${attr} or [ ]) [
+          "buildInputs"
+          "nativeBuildInputs"
+          "propagatedBuildInputs"
+          "propagatedNativeBuildInputs"
+        ]
+      ) allDrvs;
+
       contents = [
         nix
       ]
@@ -21,14 +33,7 @@
         bashInteractive # for debug, only adds 4MB
         cacert # for fetchers
       ])
-      ++ lib.flatten (
-        map (attr: drv.${attr} or [ ]) [
-          "buildInputs"
-          "nativeBuildInputs"
-          "propagatedBuildInputs"
-          "propagatedNativeBuildInputs"
-        ]
-      )
+      ++ extractedInputs
       ++ args.contents or [ ];
 
       config = {
@@ -53,6 +58,7 @@
           "contents"
           "config"
           "drv"
+          "inputsFrom"
           "nix"
           "nixConf"
           "pkgs"
