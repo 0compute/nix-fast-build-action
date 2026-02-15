@@ -2,9 +2,13 @@
   mkBuildContainer =
     {
       pkgs,
-      drv ? null,
       inputsFrom ? [ ],
-      name ? "${if drv != null then (drv.pname or drv.name or "unnamed") else "env"}-build-container",
+      name ? (
+        if inputsFrom != [ ] then
+          "${(pkgs.lib.head inputsFrom).pname or (pkgs.lib.head inputsFrom).name or "unnamed"}-build-container"
+        else
+          "nix-zero-setup-env"
+      ),
       nix ? pkgs.nixVersions.latest,
       nixConf ? ''
         experimental-features = nix-command flakes
@@ -14,8 +18,6 @@
     let
       inherit (pkgs) lib;
 
-      allDrvs = (if drv != null then [ drv ] else [ ]) ++ inputsFrom;
-
       extractedInputs = lib.concatMap (
         d:
         lib.concatMap (attr: d.${attr} or [ ]) [
@@ -24,17 +26,16 @@
           "propagatedBuildInputs"
           "propagatedNativeBuildInputs"
         ]
-      ) allDrvs;
+      ) inputsFrom;
 
-      contents = [
-        nix
-      ]
-      ++ (with pkgs; [
-        bashInteractive # for debug, only adds 4MB
-        cacert # for fetchers
-      ])
-      ++ extractedInputs
-      ++ args.contents or [ ];
+      contents =
+        [ nix ]
+        ++ (with pkgs; [
+          bashInteractive # for debug, only adds 4MB
+          cacert # for fetchers
+        ])
+        ++ extractedInputs
+        ++ args.contents or [ ];
 
       config = {
         Entrypoint = [ (lib.getExe nix) ];
@@ -57,7 +58,6 @@
         (lib.removeAttrs args [
           "contents"
           "config"
-          "drv"
           "inputsFrom"
           "nix"
           "nixConf"

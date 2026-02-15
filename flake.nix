@@ -44,11 +44,14 @@
           default = nixZeroSetupContainer;
           example = lib.mkBuildContainer {
             inherit pkgs;
-            drv = pkgs.hello;
+            inputsFrom = [ pkgs.hello ];
           };
         };
 
         checks.unit = import ./tests/unit.nix { inherit pkgs; };
+        checks.functional = import ./tests/functional.nix {
+          inherit pkgs nixZeroSetupContainer;
+        };
 
         apps = {
 
