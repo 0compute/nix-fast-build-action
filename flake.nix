@@ -16,7 +16,10 @@
 
   outputs =
     inputs:
-    (inputs.flake-utils.lib.eachDefaultSystem (
+    {
+      lib = import ./lib.nix;
+    }
+    // (inputs.flake-utils.lib.eachDefaultSystem (
       system:
       let
 
