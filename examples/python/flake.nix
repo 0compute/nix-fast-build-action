@@ -1,0 +1,46 @@
+{
+  description = "Example Python ML project using pyproject.nix and nix-zero-build";
+
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    systems.url = "github:nix-systems/default";
+    flake-utils = {
+      url = "github:numtide/flake-utils";
+      inputs.systems.follows = "systems";
+    };
+    pyproject-nix = {
+      url = "github:nix-community/pyproject.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    nix-zero-build = {
+      url = "github:your-org/nix-zero-build";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+
+  outputs =
+    inputs:
+    inputs.flake-utils.lib.eachSystem (import inputs.systems) (
+      system:
+      let
+        pkgs = inputs.nixpkgs.legacyPackages.${system};
+        python = pkgs.python3;
+        pythonEnv = python.withPackages (
+          (inputs.pyproject-nix.lib.project.loadPyproject { projectRoot = ./.; }).renderers.withPackages {
+            inherit python;
+          }
+        );
+      in
+      {
+        packages.default = pythonEnv;
+
+        packages.build-container = (inputs.nix-zero-build.lib pkgs).mkBuildContainer {
+          name = "ml-build-env";
+          contents = with pkgs; [
+            pythonEnv
+            hatch
+          ];
+        };
+      }
+    );
+}
