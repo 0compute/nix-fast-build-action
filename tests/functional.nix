@@ -21,7 +21,7 @@ pkgs.testers.runNixOSTest {
     ''
       machine.wait_for_unit("docker.service")
       machine.succeed("docker load < ${img}")
-      
+
       # verify Nix is available and functional in the container
       machine.succeed("docker run --rm --entrypoint nix ${tag} --version")
 
@@ -29,7 +29,7 @@ pkgs.testers.runNixOSTest {
       # we use builtins.derivation to avoid stdenv/nixpkgs dependencies
       machine.succeed("mkdir -p /tmp/test-project")
       machine.copy_from_host("${../lib.nix}", "/tmp/test-project/lib.nix")
-      
+
       flake_content = """
       {
         outputs = _: {
