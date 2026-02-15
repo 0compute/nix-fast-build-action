@@ -139,3 +139,18 @@ jobs:
       - run: nix build
       - run: nix flake check
 ```
+
+## Examples
+
+We provide several reference implementations demonstrating how to bake different types
+of heavy build environments:
+
+- **[Python (ML Stack)](examples/python):** Demonstrates baking a heavy Machine Learning
+  environment (PyTorch, NumPy, Pandas) using `pyproject-nix`. This avoids re-downloading
+  and re-linking massive Python wheels on every CI run.
+- **[C++ (Boost)](examples/cpp-boost):** Shows how to include system-level libraries
+  like Boost and build tools (CMake, Ninja, GCC) in the container, skipping the overhead
+  of compiling or installing these dependencies at runtime.
+- **[Rust (Toolchain)](examples/rust-app):** Illustrates baking the full Rust toolchain
+  (`cargo`, `rustc`, `clippy`, `rust-analyzer`) into the image, eliminating the need to
+  download and setup Rust for each job.
