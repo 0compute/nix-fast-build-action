@@ -1,11 +1,11 @@
 {
 
-  description = "Fast Nix builds for GitHub actions";
+  description = "Zero-setup Nix builds for GitHub actions";
 
   nixConfig = {
-    extra-substituters = [ "https://nix-fast-build-action.cachix.org" ];
+    extra-substituters = [ "https://nix-zero-build.cachix.org" ];
     extra-trusted-public-keys = [
-      "nix-fast-build-action.cachix.org-1:lNgsI3Nea9ut1dJDTlks9AHBRmBI+fj9gIkTYHGtAtE="
+      "nix-zero-build.cachix.org-1:lNgsI3Nea9ut1dJDTlks9AHBRmBI+fj9gIkTYHGtAtE="
     ];
   };
 
@@ -23,8 +23,8 @@
         pkgs = inputs.nixpkgs.legacyPackages.${system};
         lib = import ./lib.nix pkgs;
 
-        nixFastBuildContainer = lib.mkBuildContainer {
-          name = "nix-fast-build";
+        nixZeroBuildContainer = lib.mkBuildContainer {
+          name = "nix-zero-build";
           tag = with inputs; self.rev or self.dirtyRev or null;
         };
 
@@ -32,8 +32,8 @@
       {
 
         packages = {
-          inherit nixFastBuildContainer;
-          default = nixFastBuildContainer;
+          inherit nixZeroBuildContainer;
+          default = nixZeroBuildContainer;
           example = lib.mkBuildContainer pkgs.spotify;
         };
 
@@ -44,7 +44,7 @@
               type = "app";
               program = lib.getExe (
                 let
-                  inherit (nixFastBuildContainer) imageName imageTag;
+                  inherit (nixZeroBuildContainer) imageName imageTag;
                 in
                 pkgs.writeShellApplication {
                   name = "self-build";
@@ -56,7 +56,7 @@
                         command nix "$@"
                       fi
                     }
-                    nix build .#nixFastBuildContainer
+                    nix build .#nixZeroBuildContainer
                     docker load < result
                     docker tag "${imageName}:${imageTag}" "${imageName}:latest"
                   '';
