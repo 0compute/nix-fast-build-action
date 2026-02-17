@@ -29,18 +29,17 @@
     // inputs.flake-utils.lib.eachSystem (import inputs.systems) (
       system:
       let
+
         pkgs = inputs.nixpkgs.legacyPackages.${system};
+
         build-container = lib.mkBuildContainer {
           inherit pkgs;
           name = "nix-zero-setup";
           tag = inputs.self.rev or inputs.self.dirtyRev or null;
         };
+
       in
       {
-        packages = {
-          inherit build-container;
-          default = build-container;
-        };
 
         checks = {
           unit = import ./tests/unit.nix { inherit pkgs; };
@@ -50,33 +49,9 @@
           };
         };
 
-        apps = {
-
-          default = {
-            type = "app";
-            program = pkgs.lib.getExe (
-              let
-                inherit (build-container) imageName imageTag;
-              in
-              pkgs.writeShellApplication {
-                name = "self-build";
-                text = ''
-                  nix() {
-                    if command -v nom >/dev/null;
-                    then
-                      nom "$@"
-                    else
-                      command nix "$@"
-                    fi
-                  }
-                  nix build .#nixZeroSetupContainer
-                  docker load < result
-                  docker tag "${imageName}:${imageTag}" "${imageName}:latest"
-                '';
-              }
-            );
-          };
-
+        packages = {
+          inherit build-container;
+          default = build-container;
         };
 
       }
