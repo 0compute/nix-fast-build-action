@@ -5,6 +5,10 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    pyproject-nix = {
+      url = "github:nix-community/pyproject.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -37,7 +41,7 @@
           {
             utest = import ./tests/unit.nix attrs;
             ftest = import ./tests/functional.nix attrs;
-            e2e = import ./tests/e2e.nix attrs;
+            e2e = import ./tests/e2e.nix (attrs // { inherit (inputs) flake-utils pyproject-nix; });
           };
 
         packages = {

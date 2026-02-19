@@ -1,51 +1,48 @@
-# e2e test: build containers similar to the examples
-{ pkgs, mkBuildContainer }:
+# e2e test: build actual example projects
+{ pkgs, mkBuildContainer, flake-utils, pyproject-nix }:
 let
-  # simulate cpp-boost example
-  cppContainer = mkBuildContainer {
-    inherit pkgs;
-    name = "cpp-boost-e2e";
-    inputsFrom = [
-      (pkgs.stdenv.mkDerivation {
-        pname = "cpp-example";
-        version = "0.0.0";
-        src = pkgs.emptyDirectory;
-        nativeBuildInputs = with pkgs; [ cmake ninja ];
-        buildInputs = with pkgs; [ boost ];
-        buildPhase = "true";
-        installPhase = "mkdir -p $out";
-      })
-    ];
-    contents = with pkgs; [ gcc ];
+  inherit (pkgs) system;
+
+  # mock nix-zero-setup input for examples
+  nixZeroSetup = {
+    lib = { inherit mkBuildContainer; };
   };
 
-  # simulate rust example
-  rustContainer = mkBuildContainer {
-    inherit pkgs;
-    name = "rust-e2e";
-    inputsFrom = [
-      (pkgs.stdenv.mkDerivation {
-        pname = "rust-example";
-        version = "0.0.0";
-        src = pkgs.emptyDirectory;
-        nativeBuildInputs = with pkgs; [ rustc cargo ];
-        buildPhase = "true";
-        installPhase = "mkdir -p $out";
-      })
-    ];
-    contents = with pkgs; [ rust-analyzer clippy ];
+  # mock nixpkgs input
+  nixpkgs = {
+    legacyPackages.${system} = pkgs;
   };
 
-  # simulate python example
-  pythonContainer = mkBuildContainer {
-    inherit pkgs;
-    name = "python-e2e";
-    contents = with pkgs; [ python3 black ];
-  };
+  # import and build each example
+  cppBoost =
+    (import ../examples/cpp-boost/flake.nix).outputs {
+      self = { };
+      inherit nixpkgs;
+      inherit flake-utils;
+      nix-zero-setup = nixZeroSetup;
+    };
+
+  rustApp =
+    (import ../examples/rust-app/flake.nix).outputs {
+      self = { };
+      inherit nixpkgs;
+      inherit flake-utils;
+      nix-zero-setup = nixZeroSetup;
+    };
+
+  pythonExample =
+    (import ../examples/python/flake.nix).outputs {
+      self = { };
+      inherit nixpkgs flake-utils pyproject-nix;
+      nix-zero-setup = nixZeroSetup;
+    };
+
 in
 pkgs.runCommand "e2e-examples"
   {
-    inherit cppContainer rustContainer pythonContainer;
+    cppContainer = cppBoost.packages.${system}.nix-build-container;
+    rustContainer = rustApp.packages.${system}.nix-build-container;
+    pythonContainer = pythonExample.packages.${system}.nix-build-container;
   }
   ''
     echo "Verifying example containers..."
