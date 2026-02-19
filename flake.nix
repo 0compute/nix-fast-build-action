@@ -37,6 +37,7 @@
           {
             utest = import ./tests/unit.nix attrs;
             ftest = import ./tests/functional.nix attrs;
+            e2e = import ./tests/e2e.nix attrs;
           };
 
         packages = {
