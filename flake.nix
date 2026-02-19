@@ -41,7 +41,7 @@
           {
             utest = import ./tests/unit.nix attrs;
             ftest = import ./tests/functional.nix attrs;
-            e2e = import ./tests/e2e.nix (attrs // { inherit (inputs) flake-utils pyproject-nix; });
+            examples = import ./tests/examples.nix (attrs // { inherit (inputs) flake-utils pyproject-nix; });
           };
 
         packages = {
