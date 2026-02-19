@@ -1,7 +1,7 @@
 # e2e test: build all example projects dynamically
-{ pkgs, mkBuildContainer, flake-utils, pyproject-nix }:
+{ pkgs, mkBuildContainer, flake-utils, pyproject-nix, system }:
 let
-  inherit (pkgs) lib system;
+  inherit (pkgs) lib;
 
   # mock nix-zero-setup input for examples
   nixZeroSetup = {
