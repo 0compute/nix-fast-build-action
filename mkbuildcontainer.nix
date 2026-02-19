@@ -34,7 +34,8 @@ let
     bashInteractive # for debug, only adds 4mb
     cacert # for fetchers
     coreutils # basic unix tools
-    git # required for flakes
+    gitMinimal # required for flakes
+    nodejs # required by actions/checkout
   ])
   ++ extractedInputs
   ++ args.contents or [ ];
