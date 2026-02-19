@@ -22,14 +22,17 @@ let
   system = pkgs.stdenv.hostPlatform.system;
 
   # Extract derivations from flake outputs (packages, checks, apps)
+  # Filter out nix-build-container to avoid circular dependency
+  isContainer = d: lib.hasInfix "nix-build-container" (d.name or "");
   flakeDerivations =
     if flake == null then
       [ ]
     else
       let
-        getDerivations = attr: lib.attrValues (flake.${attr}.${system} or { });
+        getDerivations = attr:
+          lib.filter (d: !isContainer d) (lib.attrValues (flake.${attr}.${system} or { }));
         # Apps have { type = "app"; program = "..."; } - extract if there's a package attr
-        getApps = lib.filter lib.isDerivation (
+        getApps = lib.filter (d: lib.isDerivation d && !isContainer d) (
           map (app: app.package or null) (lib.attrValues (flake.apps.${system} or { }))
         );
       in

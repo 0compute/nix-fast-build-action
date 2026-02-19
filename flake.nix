@@ -27,6 +27,7 @@
 
         nix-build-container = mkBuildContainer {
           inherit pkgs;
+          flake = inputs.self;
           name = "nix-zero-setup";
           tag = inputs.self.rev or inputs.self.dirtyRev or null;
         };
