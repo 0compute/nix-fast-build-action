@@ -28,9 +28,9 @@
 
         nix-build-container = mkBuildContainer {
           inherit pkgs name;
-          flake = inputs.self;
+          inherit (inputs) self;
           # Exclude container itself to avoid circular dependency
-          flakeFilter = drv: !pkgs.lib.hasPrefix name (drv.name or "");
+          selfFilter = drv: !pkgs.lib.hasPrefix name (drv.name or "");
           tag = inputs.self.rev or inputs.self.dirtyRev or null;
         };
 

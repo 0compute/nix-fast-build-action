@@ -41,7 +41,7 @@ container.
 1. **Define a Container**: Use the provided `mkBuildContainer` helper in your
    `flake.nix` to create a Docker image containing Nix, Git, and your project's build
    inputs.
-1. **Build & Push**: A dedicated `self-build` app builds this container and pushes it to
+1. **Build & Push**: A reusable GitHub Action builds this container and pushes it to
    the GitHub Container Registry (GHCR).
 1. **Run CI**: Your main CI workflow specifies `container: ghcr.io/owner/repo:tag`.
 
@@ -85,8 +85,10 @@ In your `flake.nix` outputs:
         packages = {
           nix-build-container = inputs.nix-zero-setup.lib.mkBuildContainer {
             inherit pkgs;
-            # automatically include dependencies from your main package
-            inputsFrom = [ inputs.self.packages.${system}.default ];
+            # automatically include all build-time dependencies from
+            # all of your flake's packages, checks, and apps
+            inherit (inputs) self;
+            # you can still add extra packages
             contents = with pkgs; [
               jq
               ripgrep
@@ -113,16 +115,17 @@ on:
       - flake.nix
 
 jobs:
-  push:
+  build:
     runs-on: ubuntu-latest
     permissions:
+      # required for pushing to ghcr.io
       packages: write
-      contents: read
     steps:
       - uses: actions/checkout@v6
       - uses: your-org/nix-zero-setup@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          # optional, this is the default
           container_attr: .#nix-build-container
 ```
 
@@ -137,13 +140,12 @@ on:
   - pull_request
 
 jobs:
-  test:
+  check:
     runs-on: ubuntu-latest
     # run directly inside the pre-baked environment
-    container: ghcr.io/your-org/my-project-build:latest
+    container: ghcr.io/${{ github.repository }}:latest
     steps:
       - uses: actions/checkout@v6
-      - run: nix build
       - run: nix flake check
 ```
 

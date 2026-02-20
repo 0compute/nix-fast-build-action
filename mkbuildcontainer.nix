@@ -1,16 +1,22 @@
 {
   pkgs,
-  flake ? null,
-  flakeFilter ? (_drv: true),
+  self ? null,
+  selfFilter ? (_drv: true),
   inputsFrom ? [ ],
+  # name from flake default package or first inputsFrom
   name ? (
-    if inputsFrom != [ ] then
+    let
+      base = "nix-build-container";
+    in
+    if self != null then
+      self.packages.${pkgs.stdenv.hostPlatform.system}.default.pname
+    else if inputsFrom != [ ] then
       "${
         (pkgs.lib.head inputsFrom).pname or (pkgs.lib.head inputsFrom).name
           or "unnamed"
-      }-nix-build-container"
+      }-${base}"
     else
-      "nix-zero-setup-env"
+      base
   ),
   nix ? pkgs.nixVersions.latest,
   nixConf ? ''
@@ -22,33 +28,6 @@ let
   inherit (pkgs) lib;
   inherit (pkgs.stdenv.hostPlatform) system;
 
-  # Extract derivations from flake outputs (packages, checks, apps)
-  flakeDerivations =
-    if flake == null then
-      [ ]
-    else
-      let
-        getDerivations =
-          attr:
-          lib.filter flakeFilter (lib.attrValues (flake.${attr}.${system} or { }));
-      in
-      getDerivations "packages"
-      ++ getDerivations "checks"
-      # Apps have { type = "app"; program = "..."; } - extract if there's a package attr
-      ++ lib.filter (drv: lib.isDerivation drv && flakeFilter drv) (
-        map (app: app.package or null) (lib.attrValues (flake.apps.${system} or { }))
-      );
-
-  extractedInputs = lib.concatMap (
-    drv:
-    lib.concatMap (attr: drv.${attr} or [ ]) [
-      "buildInputs"
-      "nativeBuildInputs"
-      "propagatedBuildInputs"
-      "propagatedNativeBuildInputs"
-    ]
-  ) (inputsFrom ++ flakeDerivations);
-
   contents = [
     nix
   ]
@@ -59,10 +38,40 @@ let
     gitMinimal # required for flakes
     nodejs # required by actions/checkout
   ])
-  ++ extractedInputs
+  ++ (lib.concatMap
+    (
+      drv:
+      lib.concatMap (attr: drv.${attr} or [ ]) [
+        "buildInputs"
+        "nativeBuildInputs"
+        "propagatedBuildInputs"
+        "propagatedNativeBuildInputs"
+      ]
+    )
+    (
+      # pkgs.mkShell interface
+      inputsFrom
+      # extract from flake outputs
+      ++ (
+        if self == null then
+          [ ]
+        else
+          let
+            getDerivations =
+              attr: lib.filter selfFilter (lib.attrValues (self.${attr}.${system} or { }));
+          in
+          getDerivations "packages"
+          ++ getDerivations "checks"
+          # Apps have { type = "app"; program = "..."; } - extract if there's a package attr
+          ++ lib.filter (drv: lib.isDerivation drv && selfFilter drv) (
+            map (app: app.package or null) (lib.attrValues (self.apps.${system} or { }))
+          )
+      )
+    )
+  )
   ++ args.contents or [ ];
 
-  config = {
+  config = lib.recursiveUpdate {
     Entrypoint = [ (lib.getExe nix) ];
     Env = lib.mapAttrsToList (name: value: "${name}=${value}") {
       USER = "root";
@@ -77,18 +86,20 @@ let
       SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
       PATH = "/bin:/usr/bin:/sbin:/usr/sbin";
     };
-  };
+  } (args.config or {});
 
   image = pkgs.dockerTools.buildLayeredImageWithNixDb (
     (lib.removeAttrs args [
-      "contents"
       "config"
+      "contents"
       "flake"
       "flakeFilter"
       "inputsFrom"
       "nix"
       "nixConf"
       "pkgs"
+      "self"
+      "selfFilter"
     ])
     // {
       inherit name contents config;

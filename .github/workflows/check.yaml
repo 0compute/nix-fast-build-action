@@ -9,7 +9,7 @@ on:
     paths-ignore: *paths-ignore
   workflow_run:
     workflows:
-      - Build
+      - Build Container
     types:
       - completed
 
@@ -23,4 +23,4 @@ jobs:
     container: ghcr.io/${{ github.repository }}:latest
     steps:
       - uses: actions/checkout@v6
-      - run: nix flake check
+      - run: nix flake check --print-build-logs
