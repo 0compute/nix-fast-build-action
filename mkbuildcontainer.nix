@@ -1,6 +1,7 @@
 {
   pkgs,
   flake ? null,
+  flakeFilter ? (_: true),
   inputsFrom ? [ ],
   name ? (
     if inputsFrom != [ ] then
@@ -19,24 +20,24 @@
 }@args:
 let
   inherit (pkgs) lib;
-  system = pkgs.stdenv.hostPlatform.system;
+  inherit (pkgs.stdenv.hostPlatform) system;
 
   # Extract derivations from flake outputs (packages, checks, apps)
-  # Filter out nix-build-container to avoid circular dependency
-  isContainer = d: lib.hasInfix "nix-build-container" (d.name or "");
   flakeDerivations =
     if flake == null then
       [ ]
     else
       let
-        getDerivations = attr:
-          lib.filter (d: !isContainer d) (lib.attrValues (flake.${attr}.${system} or { }));
-        # Apps have { type = "app"; program = "..."; } - extract if there's a package attr
-        getApps = lib.filter (d: lib.isDerivation d && !isContainer d) (
-          map (app: app.package or null) (lib.attrValues (flake.apps.${system} or { }))
-        );
+        getDerivations =
+          attr:
+          lib.filter flakeFilter (lib.attrValues (flake.${attr}.${system} or { }));
       in
-      getDerivations "packages" ++ getDerivations "checks" ++ getApps;
+      getDerivations "packages"
+      ++ getDerivations "checks"
+      # Apps have { type = "app"; program = "..."; } - extract if there's a package attr
+      ++ lib.filter (drv: lib.isDerivation drv && flakeFilter drv) (
+        map (app: app.package or null) (lib.attrValues (flake.apps.${system} or { }))
+      );
 
   extractedInputs = lib.concatMap (
     d:
@@ -83,6 +84,7 @@ let
       "contents"
       "config"
       "flake"
+      "flakeFilter"
       "inputsFrom"
       "nix"
       "nixConf"

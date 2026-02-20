@@ -24,11 +24,13 @@
       let
 
         pkgs = inputs.nixpkgs.legacyPackages.${system};
+        name = "nix-zero-setup";
 
         nix-build-container = mkBuildContainer {
-          inherit pkgs;
+          inherit pkgs name;
           flake = inputs.self;
-          name = "nix-zero-setup";
+          # Exclude container itself to avoid circular dependency
+          flakeFilter = d: !pkgs.lib.hasPrefix name (d.name or "");
           tag = inputs.self.rev or inputs.self.dirtyRev or null;
         };
 
@@ -42,7 +44,13 @@
           {
             utest = import ./tests/unit.nix attrs;
             ftest = import ./tests/functional.nix attrs;
-            examples = import ./tests/examples.nix (attrs // { inherit system; inherit (inputs) flake-utils pyproject-nix; });
+            examples = import ./tests/examples.nix (
+              attrs
+              // {
+                inherit system;
+                inherit (inputs) flake-utils pyproject-nix;
+              }
+            );
           };
 
         packages = {
