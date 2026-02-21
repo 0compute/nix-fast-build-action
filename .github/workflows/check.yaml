@@ -15,7 +15,7 @@ on:
 
 env:
   # errexit and pipefail set by the runner
-  SHELLOPTS: nounset
+  SHELLOPTS: ""
 
 jobs:
   check:
