@@ -22,54 +22,66 @@
   nixConf ? ''
     experimental-features = nix-command flakes
   '',
+  # these are tiny and make debug much easier - override to empty if desired
+  debugTools ? with pkgs; [
+    bashInteractive
+    coreutils
+  ],
   ...
 }@args:
 let
   inherit (pkgs) lib;
   inherit (pkgs.stdenv.hostPlatform) system;
 
-  contents = [
-    nix
-  ]
-  ++ (with pkgs; [
-    bashInteractive # for debug, only adds 4mb
-    cacert # for fetchers
-    coreutils # basic unix tools
-    gitMinimal # required for flakes
-    nodejs # required by actions/checkout
-  ])
-  ++ (lib.concatMap
-    (
-      drv:
-      lib.concatMap (attr: drv.${attr} or [ ]) [
-        "buildInputs"
-        "nativeBuildInputs"
-        "propagatedBuildInputs"
-        "propagatedNativeBuildInputs"
-      ]
-    )
-    (
-      # pkgs.mkShell interface
-      inputsFrom
-      # extract from flake outputs
-      ++ (
-        if self == null then
-          [ ]
-        else
-          let
-            getDerivations =
-              attr: lib.filter selfFilter (lib.attrValues (self.${attr}.${system} or { }));
-          in
-          getDerivations "packages"
-          ++ getDerivations "checks"
-          # Apps have { type = "app"; program = "..."; } - extract if there's a package attr
-          ++ lib.filter (drv: lib.isDerivation drv && selfFilter drv) (
-            map (app: app.package or null) (lib.attrValues (self.apps.${system} or { }))
-          )
+  corePkgs =
+    with pkgs;
+    [
+      # nix from args
+      nix
+      # nix fetchers
+      cacert
+      # actions runtime
+      glibc
+      stdenv.cc.cc.lib
+      # actions/checkout
+      nodejs
+    ]
+    ++ lib.optionals (debugTools != [ ]) debugTools;
+
+  contents =
+    corePkgs
+    ++ (lib.concatMap
+      (
+        drv:
+        lib.concatMap (attr: drv.${attr} or [ ]) [
+          "buildInputs"
+          "nativeBuildInputs"
+          "propagatedBuildInputs"
+          "propagatedNativeBuildInputs"
+        ]
+      )
+      (
+        # pkgs.mkShell interface
+        inputsFrom
+        # extract from flake outputs
+        ++ (
+          if self == null then
+            [ ]
+          else
+            let
+              getDerivations =
+                attr: lib.filter selfFilter (lib.attrValues (self.${attr}.${system} or { }));
+            in
+            getDerivations "packages"
+            ++ getDerivations "checks"
+            # Apps have { type = "app"; program = "..."; } - extract if there's a package attr
+            ++ lib.filter (drv: lib.isDerivation drv && selfFilter drv) (
+              map (app: app.package or null) (lib.attrValues (self.apps.${system} or { }))
+            )
+        )
       )
     )
-  )
-  ++ args.contents or [ ];
+    ++ args.contents or [ ];
 
   config = lib.recursiveUpdate {
     Entrypoint = [ (lib.getExe nix) ];
@@ -86,7 +98,7 @@ let
       SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
       PATH = "/bin:/usr/bin:/sbin:/usr/sbin";
     };
-  } (args.config or {});
+  } (args.config or { });
 
   image = pkgs.dockerTools.buildLayeredImageWithNixDb (
     (lib.removeAttrs args [
@@ -103,19 +115,19 @@ let
     ])
     // {
       inherit name contents config;
-      # nix needs /tmp to build. we also create a standard /bin env
       extraCommands = ''
+        # nix needs /tmp to build
         mkdir --mode=1777 tmp
-        mkdir --parents bin
-        for pkg in ${lib.concatStringsSep " " contents}; do
-          if [ -d "$pkg/bin" ]; then
-            ln --symbolic "$pkg"/bin/* bin/ || true
-          fi
-        done
+        # actions expect node here
+        externals=__e
+        mkdir $externals
+        nodeDir=$externals/node${lib.versions.major pkgs.nodejs.version}
+        mkdir --parents $nodeDir/bin
+        ln --symbolic ${lib.getExe pkgs.nodejs} $nodeDir/bin/node
       '';
     }
   );
 in
 # expose metadata for unit testing and inspection. buildLayeredImageWithNixDb
 # does not support passthru or automatically export its internal arguments
-image // { inherit contents config; }
+image // { inherit contents config corePkgs; }

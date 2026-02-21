@@ -4,11 +4,15 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
+    flake-utils = {
+      url = "github:numtide/flake-utils";
+      inputs.systems.follows = "systems";
+    };
     pyproject-nix = {
       url = "github:nix-community/pyproject.nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    systems.url = "github:nix-systems/default-linux";
   };
 
   outputs =
@@ -31,6 +35,7 @@
           inherit (inputs) self;
           # Exclude container itself to avoid circular dependency
           selfFilter = drv: !pkgs.lib.hasPrefix name (drv.name or "");
+          # tag is null if we build with `nix build path:.`
           tag = inputs.self.rev or inputs.self.dirtyRev or null;
         };
 

@@ -36,68 +36,60 @@ let
       expected = "custom.tar.gz";
     };
 
-    testInputsFromMerging = {
-      expr =
-        let
-          drv1 = pkgs.stdenv.mkDerivation {
-            pname = "test1";
-            version = "1.0";
-            buildInputs = with pkgs; [ hello ];
-          };
-          drv2 = pkgs.stdenv.mkDerivation {
-            pname = "test2";
-            version = "1.0";
-            nativeBuildInputs = with pkgs; [ ripgrep ];
-          };
-          container = mkBuildContainer {
-            inherit pkgs;
-            inputsFrom = [
-              drv1
-              drv2
-            ];
-            contents = with pkgs; [ jq ];
-          };
-        in
-        container.contents;
-      expected = with pkgs; [
-        nixVersions.latest
-        bashInteractive
-        cacert
-        coreutils
-        gitMinimal
-        nodejs
-        hello
-        ripgrep
-        jq
-      ];
-    };
+    testInputsFromMerging =
+      let
+        drv1 = pkgs.stdenv.mkDerivation {
+          pname = "test1";
+          version = "1.0";
+          buildInputs = with pkgs; [ hello ];
+        };
+        drv2 = pkgs.stdenv.mkDerivation {
+          pname = "test2";
+          version = "1.0";
+          nativeBuildInputs = with pkgs; [ ripgrep ];
+        };
+        container = mkBuildContainer {
+          inherit pkgs;
+          inputsFrom = [
+            drv1
+            drv2
+          ];
+          contents = with pkgs; [ jq ];
+        };
+      in
+      {
+        expr = container.contents;
+        expected =
+          container.corePkgs
+          ++ (with pkgs; [
+            hello
+            ripgrep
+            jq
+          ]);
+      };
 
-    testContentsMerging = {
-      expr =
-        let
-          drv = pkgs.stdenv.mkDerivation {
-            pname = "test";
-            version = "1.0";
-            buildInputs = with pkgs; [ hello ];
-          };
-          container = mkBuildContainer {
-            inherit pkgs;
-            inputsFrom = [ drv ];
-            contents = with pkgs; [ jq ];
-          };
-        in
-        container.contents;
-      expected = with pkgs; [
-        nixVersions.latest
-        bashInteractive
-        cacert
-        coreutils
-        gitMinimal
-        nodejs
-        hello
-        jq
-      ];
-    };
+    testContentsMerging =
+      let
+        drv = pkgs.stdenv.mkDerivation {
+          pname = "test";
+          version = "1.0";
+          buildInputs = with pkgs; [ hello ];
+        };
+        container = mkBuildContainer {
+          inherit pkgs;
+          inputsFrom = [ drv ];
+          contents = with pkgs; [ jq ];
+        };
+      in
+      {
+        expr = container.contents;
+        expected =
+          container.corePkgs
+          ++ (with pkgs; [
+            hello
+            jq
+          ]);
+      };
   };
 in
 if results == [ ] then
