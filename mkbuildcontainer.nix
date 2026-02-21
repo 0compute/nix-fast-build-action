@@ -70,13 +70,19 @@ let
           else
             let
               getDerivations =
-                attr: lib.filter selfFilter (lib.attrValues (self.${attr}.${system} or { }));
+                attr:
+                lib.filter selfFilter (
+                  lib.attrValues (self.${attr}.${system} or { })
+                );
             in
             getDerivations "packages"
             ++ getDerivations "checks"
-            # Apps have { type = "app"; program = "..."; } - extract if there's a package attr
+            # Apps have { type = "app"; program = "..."; }.
+            # Extract if there's a package attr.
             ++ lib.filter (drv: lib.isDerivation drv && selfFilter drv) (
-              map (app: app.package or null) (lib.attrValues (self.apps.${system} or { }))
+              map
+                (app: app.package or null)
+                (lib.attrValues (self.apps.${system} or { }))
             )
         )
       )
@@ -95,6 +101,10 @@ let
         build-users-group =
         ${nixConf}
       '';
+      LD_LIBRARY_PATH =
+        "/lib:/lib64:/lib/"
+        + pkgs.stdenv.hostPlatform.linuxArch
+        + "-linux-gnu";
       SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
       PATH = "/bin:/usr/bin:/sbin:/usr/sbin";
     };

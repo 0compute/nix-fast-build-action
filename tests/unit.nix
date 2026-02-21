@@ -12,8 +12,18 @@ let
           }).config.Env;
       expected = pkgs.lib.sort (left: right: left < right) [
         "USER=root"
-        "NIX_CONFIG=sandbox = false\nbuild-users-group =\nextra-features = nix-command\n"
+        (
+          "NIX_CONFIG="
+          + "sandbox = false\n"
+          + "build-users-group =\n"
+          + "extra-features = nix-command\n"
+        )
         "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+        (
+          "LD_LIBRARY_PATH=/lib:/lib64:/lib/"
+          + pkgs.stdenv.hostPlatform.linuxArch
+          + "-linux-gnu"
+        )
         "PATH=/bin:/usr/bin:/sbin:/usr/sbin"
       ];
     };
