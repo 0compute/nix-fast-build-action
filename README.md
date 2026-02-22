@@ -336,6 +336,10 @@ Next steps:
    + contract ABI).
 3. Hook the workflow into CI/flake checks so promotions run only after every stage passes.
 
+Gas economics matter: because every promotion writes to an L2 registry, prefer batching
+promotions under a Merkle root and reuse the cheapest finality window (e.g., optimistic rollups)
+to keep per-hash gas cost predictable and low.
+
 ### Legal Compliance
 
 - Apple SDKs are strictly build-time dependencies; no SDK binaries are included in build
