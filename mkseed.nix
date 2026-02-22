@@ -95,10 +95,9 @@ let
       USER = "root";
       GIT_TEXTDOMAINDIR = "${pkgs.git}/share/locale";
       GIT_INTERNAL_GETTEXT_TEST_FALLBACKS = "";
-      # requires "sandbox = false" because unprivileged containers lack the
-      # namespace privileges required to create it
-      # AGENT: is this true and/or necessary?
-      # we also disable build-users-group because containers often lack them
+      # unprivileged containers often lack user namespaces required for
+      # sandboxing
+      # disable build-users-group because containers often lack the group
       NIX_CONFIG = ''
         sandbox = false
         build-users-group =
