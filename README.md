@@ -1,165 +1,320 @@
-# Nix Zero Setup
+# Nix Seed
 
-A pattern and toolkit for ultra-fast, reproducible GitHub Actions workflows using
-Nix-built containers.
+Hermetic. Cacheable. Fast.
 
-## The Problem
+## Overview
 
-Standard Nix CI workflows often look like this:
+`Nix Seed` provides Nix OCI seeds for build and runtime environments. It pins all
+inputs for deterministic, cacheable builds, so rebuilds are quick when layers are
+unchanged.
 
-1. Spin up a generic runner (`ubuntu-latest`).
-1. Install Nix (e.g., via `install-nix-action`).
-1. Configure caches (Magic Nix Cache, Cachix).
-1. Fetch flake inputs.
-1. **Finally** build your project.
+![XKCD Compiling](https://imgs.xkcd.com/comics/compiling.png)
 
-Steps 2-4 take time, bandwidth, and API calls on *every single job*. While Nix caching
-helps, you still pay the "setup tax" repeatedly.
+> > Not any more fuckers. Work Harder.
 
-## The Solution: Pre-baked Containers
+**By using pre-baked OCI layers, Nix Seed targets fast rebuilds when cached without
+compromising hermeticity or reproducibility.** Hermetic builds isolate from host and
+network influences; reproducible builds aim for identical outputs when inputs and
+tooling are pinned.
 
-Instead of configuring the environment at runtime, **bake your build inputs into a
-Docker container** using Nix, push it to GHCR, and run your CI jobs *inside* that
-container.
+- **Build seeds:** hermetic, full-featured; include base, library, apps, checks,
+  devShells, overlays.
+- **Runtime seeds:** hermetic and slim; include base, library, and apps. Optional musl
+  variant is available for smaller runtimes.
 
-### Advantages
+**Note:** Base layers use a minimized Nixpkgs derivation. Size depends on the package
+set but remains fully Nix-native.
 
-1. **Instant Startup**: The environment is ready immediately. Since GHCR and GitHub
-   Actions share the Azure backbone, image pulls are near-instant. No
-   `install-nix-action` or setup tax.
-1. **Strict Reproducibility**: The CI container is built from the same lockfile as your
-   project. If it works in the container locally, it works in CI.
-1. **Efficient Caching**: We use `pkgs.dockerTools.buildLayeredImageWithNixDb`. This
-   creates Docker layers corresponding to Nix store paths. If you only change your
-   source code, the heavy dependency layers (compilers, libraries) remain cached and are
-   pulled instantly.
-1. **Hermeticity**: Your build environment is isolated from the host runner. No
-   interference from pre-installed GitHub Action tools.
+## Quick Start
 
-## How It Works
+Build the default seed and load it into Docker:
 
-1. **Define a Container**: Use the provided `mkBuildContainer` helper in your
-   `flake.nix` to create a Docker image containing Nix, Git, and your project's build
-   inputs.
-1. **Build & Push**: A reusable GitHub Action builds this container and pushes it to
-   the GitHub Container Registry (GHCR).
-1. **Run CI**: Your main CI workflow specifies `container: ghcr.io/owner/repo:tag`.
+```sh
+nix build .#seed
+docker load < result
+```
 
-## Usage
+List loaded images:
 
-### 1. Import the Library
+```sh
+docker image list
+```
 
-Add this flake as an input:
+## Extreme Cacheability and Baked Flakes
+
+**Extreme cacheability** is a core principle. Inputs are baked into the local store and
+distributed via caches, so pre-built layers can be reused across developers, CI, and
+registries.
+
+### Comparison with Nix Community / GH Actions Caches
+
+| Feature | Nix Seed (pre-baked layers) | Standard caches | | --- | --- | --- | |
+Hermetic build | ✅ fully isolated | ⚠ may fetch missing paths | | Reproducible | ✅
+pinned inputs/tools | ⚠ host/tool differences | | Incremental rebuilds | ✅ only changed
+layers | ⚠ larger rebuild surface | | Multi-layer reuse | ✅ base, libs, apps, checks,
+devShells, overlays | ❌ flat cache | | Cache keys | ✅ flake input hash per layer | ⚠ ad
+hoc or per-derivation | | Network dependency | ❌ offline possible | ⚠ remote caches;
+bandwidth + untar CPU | | Developer speed | ✅ near-instant when cached | ⚠ slower; more
+network and CPU |
+
+**Summary:** Nix Seed turns the pinned dependency graph into reusable OCI layers, not
+single store paths. That yields faster, hermetic, reproducible builds, without the setup
+tax of repeatedly populating per-run Nix caches in typical GitHub Actions flows.
+
+## Layer -> OCI -> Cache Diagram
+
+Split output/layer to OCI layer to cache key mapping:
+
+| Output or layer | OCI layer | Cache key | | --- | --- | --- | | base | Layer 1 |
+hash(base + inputs) | | library | Layer 2 | hash(library + inputs) | | apps | Layer 3 |
+hash(apps + scripts) | | checks | Layer 4 | hash(tests + deps) | | devShells | Layer 5 |
+hash(dev tools + notebooks) | | overlays | Layer 6 | hash(overlays) |
+
+- Runtime seed: base + library + apps.
+- Build seed: all layers for hermetic, cacheable builds.
+
+## Flake Schema Layered Nix OCI Seeds
+
+Nix Seed supports split outputs per derivation to implement layers automatically. Users
+can define dependencies in standard layer names, and Nix Seed will produce hermetic,
+cacheable layers.
+
+Usage outline:
+
+- Define split outputs for `base`, `library`, `apps`, optional `checks`, `devShells`,
+  `overlays`.
+- Keep each output scoped to its layer dependencies.
+- Runtime images include base + library + apps; build images include all layers.
+
+### Standard Layer Helper Function (Embedded)
 
 ```nix
-{
-  inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    systems.url = "github:nix-systems/default";
-    flake-utils = {
-      url = "github:numtide/flake-utils";
-      inputs.systems.follows = "systems";
-    };
-    nix-zero-setup = {
-      url = "github:your-org/nix-zero-setup";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+{ pkgs }:
+
+let
+  standardLayers = {
+    base = [ pkgs.python pkgs.gcc pkgs.coreutils ];
+    library = [ pkgs.numpy pkgs.pandas pkgs.matplotlib ];
+    apps = [ ./my-script ./my-model ];
+    checks = [ ./tests ];
+    devShells = [ pkgs.jupyter pkgs.streamlit ];
+    overlays = [ ./my-overlay ];
   };
-  # ...
-}
+
+in
+  pkgs.stdenv.mkDerivation {
+    name = "nix-seed-standard-layers";
+    outputs = builtins.attrNames standardLayers;
+
+    buildCommand = ''
+      for layer in ${builtins.concatStringsSep " " (builtins.attrNames standardLayers)}; do
+        mkdir -p $out/$layer
+        cp -r ${standardLayers.$layer}/* $out/$layer/
+      done
+    '';
+  }
 ```
 
-### 2. Define Your Build Container
+Users can override or extend standard layers as needed. Each split output maps to an OCI
+layer. Runtime seeds include base + library + apps; build seeds include all layers.
+Runtime excludes: checks, devShells, overlays.
 
-In your `flake.nix` outputs:
+## Layered Seed Architecture
 
-```nix
-  outputs =
-    inputs:
-    inputs.flake-utils.lib.eachSystem (import inputs.systems) (
-      system:
-      let
-        pkgs = inputs.nixpkgs.legacyPackages.${system};
-      in
-      {
-        packages = {
-          nix-build-container = inputs.nix-zero-setup.lib.mkBuildContainer {
-            inherit pkgs;
-            # automatically include all build-time dependencies from
-            # all of your flake's packages, checks, and apps
-            inherit (inputs) self;
-            # you can still add extra packages
-            contents = with pkgs; [
-              jq
-              ripgrep
-            ];
-          };
-        };
-      }
-    );
-```
+- **Base layer:** OS, compilers, Python runtime (minimal Nixpkgs).
+- **Library layer:** libraries, numerical and ML packages.
+- **Apps layer:** Python scripts, AI pipelines, models.
+- **Checks layer:** unit tests, validation scripts.
+- **DevShells layer:** developer tools, Jupyter, Streamlit (build-only).
+- **Overlays layer:** patches, version overrides (build-only).
 
-### 3. Setup the Push Workflow
+## Runtime vs Build Layer Table
 
-Create a `.github/workflows/container.yml` to update the container when dependencies
-change. You can use our provided GitHub Action to simplify this:
+| Layer | Runtime seed | Build seed | | --- | --- | --- | | base | ✅ | ✅ | | library
+| ✅ | ✅ | | apps | ✅ | ✅ | | checks | ❌ | ✅ | | devShells | ❌ | ✅ | | overlays | ❌ | ✅ |
+
+Runtime includes only base + library + apps. Optional musl runtime is available for
+smaller images. Build seed includes all inputs for all layers to preserve hermeticity
+and caching.
+
+Expected runtime sizes:
+
+- Small scripts: ~1-10 MB.
+- Minimal base: ~15-25 MB.
+- AI stack runtime: ~500-900 MB (CPU), GPU variant ~2-3 GB compressed.
+
+## GitHub Actions Integration
+
+Nix Seed can be used in [GitHub Actions](https://docs.github.com/actions) to build and
+publish images with pinned inputs and cacheable layers.
+
+- Run builds with `--option substitute false` to force local derivation builds.
+- If your workflow uses Node-based actions, ensure Node is available in the build image
+  at a predictable path.
+- Setting `github_token` triggers load, tag, and push in one publish step. Omit it to
+  build only. Add extra tags via `tags`. Use `registry` to push somewhere other than
+  ghcr.io. Use `tag_latest: true` only when publishing the manifest after all systems
+  finish. `seed_attr` defaults to `.#seed`. Seeds default to `substitutes = false`;
+  set `substitutes = true` in `mkseed.nix` if you want to allow binary cache use inside
+  the seed.
+
+Example workflow using the local composite action:
 
 ```yaml
-name: Build Container
-on:
-  push:
-    branches:
-      - main
-    paths:
-      - flake.lock
-      - flake.nix
-
+name: build
+on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      # required for pushing to ghcr.io
+      contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v6
-      - uses: your-org/nix-zero-setup@v1
+      - uses: actions/checkout@v4
+      - uses: ./
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          # optional, this is the default
-          container_attr: .#nix-build-container
+          seed_attr: .#seed
 ```
 
-### 4. Use in Your Main Workflow
-
-In your main `.github/workflows/ci.yml`:
+Example workflow using a published action (replace the ref):
 
 ```yaml
-name: CI
-on:
-  - push
-  - pull_request
-
+name: build
+on: [push]
 jobs:
-  check:
+  build:
     runs-on: ubuntu-latest
-    # run directly inside the pre-baked environment
-    container: ghcr.io/${{ github.repository }}:latest
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - uses: actions/checkout@v6
-      - run: nix flake check
+      - uses: actions/checkout@v4
+      - uses: your-org/nix-seed@v0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          seed_attr: .#seed
 ```
 
-## Examples
+## Expected Time-to-Build
 
-We provide several reference implementations demonstrating how to bake different types
-of heavy build environments:
+| Scenario | Approx. time | Notes | | --- | --- | --- | | Fully cached | ~0-5 sec | Eval
+\+ layer verification | | Project layer invalidated | 10-60 sec | Top-level package
+rebuild | | Library layer invalidated | 1-5 min | Dependency rebuild | | Toolchain/base
+invalidated | 5-20+ min | Full graph rebuild |
 
-- **[Python (ML Stack)](examples/python):** Demonstrates baking a heavy Machine Learning
-  environment (PyTorch, NumPy, Pandas) using `pyproject-nix`. This avoids re-downloading
-  and re-linking massive Python wheels on every CI run.
-- **[C++ (Boost)](examples/cpp-boost):** Shows how to include system-level libraries
-  like Boost and build tools (CMake, Ninja, GCC) in the container, skipping the overhead
-  of compiling or installing these dependencies at runtime.
-- **[Rust (Toolchain)](examples/rust-app):** Illustrates baking the full Rust toolchain
-  (`cargo`, `rustc`, `clippy`, `rust-analyzer`) into the image, eliminating the need to
-  download and setup Rust for each job.
+Incremental rebuilds only invalidate layers whose inputs changed. Runtime seeds are
+hermetic and slim; build seeds include all inputs for all layers.
+
+## Multi-Target / Multi-Arch
+
+- Cross-compilation handled hermetically.
+- Supports x86_64 and ARM64, Linux and Darwin targets.
+- Darwin builds run inside Linux OCI seeds on macOS hosts.
+- SDKs for macOS are build-time-only; where required, only the flake hash is used.
+- No emulation required for CPU-only builds.
+- Optional musl runtimes available for smaller images.
+- Designed for developer speed: only changed layers rebuild.
+- Nix `system` is the platform triple used by flake outputs (for example,
+  `x86_64-linux`, `aarch64-linux`, `aarch64-darwin`). OCI manifests use `os/arch`
+  (`linux/amd64`, `linux/arm64`, `darwin/arm64`); pick the matching Nix `system` when
+  building per-arch images and apply `latest` only when tagging the manifest list.
+
+## Trust No Fucker
+
+Even with fully reproducible builds, attacks like Ken Thompson's
+[Trusting Trust](https://dl.acm.org/doi/10.1145/358198.358210) remain a concern. A
+malicious compiler could inject code during compilation without being visible in source
+code.
+
+To guarantee hermetic, reproducible, and verifiable builds, Nix Seed produces a build
+attestation for every seed:
+
+```json
+{
+  "flakeHash": "sha256-flake-inputs",
+  "layerHashes": {
+    "base": "sha256",
+    "library": "sha256",
+    "apps": "sha256",
+    "checks": "sha256",
+    "devShells": "sha256",
+    "overlays": "sha256"
+  },
+  "seedDigest": "sha256",
+  "signature": "gpg-or-slsa",
+  "builtBy": "builder-identity",
+  "timestamp": "ISO8601"
+}
+```
+
+- `flakeHash`: inputs match the declared pinned flake.
+- `layerHashes`: each split output layer is unmodified.
+- `seedDigest`: final OCI image digest.
+- `signature`: optional GPG or SLSA signature for authenticity.
+
+Attestations can be stored as JSON files or OCI annotations, allowing developers and
+CI/CD pipelines to verify builds independently.
+
+For multi-builder assurance, require an n-of-m threshold of independent attestations
+over the same build hash and store the bundle in a transparency log (for example, Rekor
+or a self-hosted equivalent). Verification should check the quorum, not a single signer.
+If stronger coordination is needed, run a small permissioned consensus log (for example,
+Tendermint or HotStuff validators) to anchor attestation entries without public-chain
+overhead.
+
+Use [`bin/verify`](./bin/verify) for quorum verification and optional OCI attachment via
+`oras` (args: IMAGE_REF [-d ATTESTATIONS_DIR] [-r REQUIRED_ATTESTATIONS] [-A] [-a]
+[--dry-run]).
+
+CI pattern to verify quorum and attach (example):
+
+```yaml
+jobs:
+  attest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch attestations
+        run: |
+          mkdir -p attestations
+          aws s3 cp s3://your-bucket/$GITHUB_SHA/ attestations/ --recursive
+      - name: Verify n-of-m and attach
+        run: |
+          ./bin/verify \
+            ghcr.io/${{ github.repository }}:${{ github.sha }} \
+            -d attestations \
+            -r 2 \
+            -A \
+            -a
+```
+
+Use `--dry-run` with `./bin/verify` to verify without attaching.
+
+Note: [`mkseed.nix`](./mkseed.nix) prepends `${./bin}` to PATH inside seeds so
+helpers like [`bin/verify`](./bin/verify) are available in built images.
+
+Multi-arch: attach per-arch attestations before composing a manifest list so each
+platform entry carries its own attestation; consumers pull the manifest, and runtimes
+fetch the matching platform layers automatically.
+
+Flake package `verify` (resholve via `writeShellApplication`) is available with
+`nix build .#verify` for pinned, dependency-resolved usage.
+
+For highest assurance, combine n-of-m attestations with a full-source bootstrap chain
+for compilers and critical tools, then cross-verify hashes from independent builders
+before promotion.
+
+Full-source bootstraps are achievable but non-trivial: see Guix and bootstrappable
+builds (mes, stage0, tinycc) for minimal binary seeds and documented compiler chains.
+Expect extra effort to align toolchains, trim seeds, and verify each stage across
+independent builders.
+
+### Legal Compliance
+
+- Apple SDKs are strictly build-time dependencies; no SDK binaries are included in build
+  or runtime seeds.
+- macOS-targeted builds must execute on licensed macOS hosts or runners.
+- Runtime seeds include only Nix-native dependencies and built outputs, never Apple
+  SDK content.
+- All Nixpkgs, overlays, and other open-source inputs are fully redistributable.

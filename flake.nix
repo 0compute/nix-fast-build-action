@@ -1,9 +1,20 @@
 {
 
-  description = "Zero-setup Nix builds for GitHub actions";
+  description = "Nix Seed builds for GitHub Actions";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    nixpkgs = {
+      url = "github:nixos/nixpkgs/nixos-unstable";
+    };
+    artstd = {
+      url = "path:/home/arthur/wrk/artdev/artstd";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+        flake-utils.follows = "flake-utils";
+        systems.follows = "systems";
+        pyproject-nix.follows = "pyproject-nix";
+      };
+    };
     flake-utils = {
       url = "github:numtide/flake-utils";
       inputs.systems.follows = "systems";
@@ -12,49 +23,145 @@
       url = "github:nix-community/pyproject.nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    systems.url = "github:nix-systems/default-linux";
+    systems = {
+      url = "github:nix-systems/default";
+    };
   };
 
   outputs =
     inputs:
     let
-      mkBuildContainer = import ./mkbuildcontainer.nix;
+      inherit (inputs.nixpkgs) lib;
+      inherit (inputs.artstd.lib) flakeSet;
+      mkSeed = import ./mkseed.nix;
     in
-    {
-      lib = { inherit mkBuildContainer; };
-    }
-    // inputs.flake-utils.lib.eachDefaultSystem (
-      system:
-      let
+    flakeSet {
 
-        pkgs = inputs.nixpkgs.legacyPackages.${system};
-        name = "nix-zero-setup";
+      inherit (inputs) self;
 
-        nix-build-container = mkBuildContainer {
-          inherit pkgs name;
+      overlays.default = _final: _prev: { };
+
+      lib = { inherit mkSeed; };
+
+      apps =
+        pkgs:
+        let
+          inherit (pkgs)
+            docker
+            coreutils
+            jq
+            oras
+            skopeo
+            ;
           inherit (inputs) self;
-          # Exclude container itself to avoid circular dependency
-          selfFilter = drv: !pkgs.lib.hasPrefix name (drv.name or "");
-          # tag is null if we build with `nix build path:.`
-          tag = inputs.self.rev or inputs.self.dirtyRev or null;
+          name = "nix-seed";
+          seed = mkSeed {
+            inherit pkgs name;
+            inherit self;
+            selfFilter = drv: !lib.hasPrefix name (drv.name or "");
+            tag = self.rev or self.dirtyRev or null;
+          };
+          tools = {
+            seedLoad = pkgs.writeShellApplication {
+              name = "seed-load";
+              runtimeInputs = [ docker ];
+              text = ''
+                ${lib.getExe docker} load < ${seed}
+              '';
+            };
+            verify = pkgs.writeShellApplication {
+              name = "verify";
+              runtimeInputs = [
+                coreutils
+                jq
+                oras
+                skopeo
+              ];
+              text = builtins.readFile ./bin/verify;
+            };
+            publish = pkgs.writeShellApplication {
+              name = "publish";
+              runtimeInputs = [ docker ];
+              text = ''
+                ${lib.getExe pkgs.nix} build .#seed
+                ${lib.getExe docker} load < result
+              '';
+            };
+          };
+        in
+        {
+          publish = {
+            type = "app";
+            program = lib.getExe tools.publish;
+          };
+          seedLoad = {
+            type = "app";
+            program = lib.getExe tools.seedLoad;
+          };
+          verify = {
+            type = "app";
+            program = lib.getExe tools.verify;
+          };
         };
 
-      in
-      {
+      packages =
+        pkgs:
+        let
+          inherit (pkgs)
+            lib
+            docker
+            coreutils
+            jq
+            oras
+            skopeo
+            ;
+          inherit (inputs) self;
+          name = "nix-seed";
+          seed = mkSeed {
+            inherit pkgs name;
+            inherit self;
+            selfFilter = drv: !lib.hasPrefix name (drv.name or "");
+            tag = self.rev or self.dirtyRev or null;
+          };
+          tools = {
+            seedLoad = pkgs.writeShellApplication {
+              name = "seed-load";
+              runtimeInputs = [ docker ];
+              text = ''
+                ${lib.getExe docker} load < ${seed}
+              '';
+            };
+            verify = pkgs.writeShellApplication {
+              name = "verify";
+              runtimeInputs = [
+                coreutils
+                jq
+                oras
+                skopeo
+              ];
+              text = builtins.readFile ./bin/verify;
+            };
+          };
+        in
+        {
+          inherit seed;
+          default = seed;
+          inherit (tools) seedLoad verify;
+        };
 
-        checks =
-          let
-            attrs = { inherit pkgs mkBuildContainer; };
-            runFtest = builtins.getEnv "CI" != "true";
-          in
-          {
+      checks =
+        pkgs:
+        let
+          inherit (pkgs.stdenv.hostPlatform) system;
+          attrs = { inherit pkgs mkSeed; };
+          runFtest = builtins.getEnv "CI" != "true";
+          suites = {
             utest = import ./tests/unit.nix attrs;
             ftest =
               if runFtest then
                 import ./tests/functional.nix attrs
               else
-                pkgs.runCommand "ftest-skipped" { }
-                  "touch $out";
+                pkgs.runCommand "ftest-skipped" { } "touch $out";
             examples = import ./tests/examples.nix (
               attrs
               // {
@@ -63,13 +170,9 @@
               }
             );
           };
+        in
+        suites;
 
-        packages = {
-          inherit nix-build-container;
-          default = nix-build-container;
-        };
-
-      }
-    );
+    };
 
 }

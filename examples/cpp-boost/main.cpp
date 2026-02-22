@@ -5,7 +5,7 @@
 
 int main() {
   // p1: Minimalism. Use smart pointers as per C++ standard
-  auto message = std::make_unique<std::string>("Nix Zero Setup");
+  auto message = std::make_unique<std::string>("Nix Seed");
 
   std::cout << boost::format("Hello from %1%!") % *message << std::endl;
 

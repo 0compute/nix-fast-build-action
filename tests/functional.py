@@ -1,20 +1,20 @@
-# Functional test for nix-zero-setup container
-# Validates that the container can run Nix commands and evaluate flakes
+# Functional test for nix-seed seed image
+# Validates that the seed can run Nix commands and evaluate flakes
 machine.wait_for_unit("docker.service")
 machine.succeed("docker load < @img@")
 
-# verify Nix is available and functional in the container
+# verify Nix is available and functional in the seed
 machine.succeed("docker run --rm --entrypoint nix @tag@ --version")
 
-# create a minimal Nix project to build inside the container
+# create a minimal Nix project to build inside the seed
 machine.succeed("mkdir -p /tmp/test-project")
-machine.copy_from_host("@mkbuildcontainer@", "/tmp/test-project/mkbuildcontainer.nix")
+machine.copy_from_host("@mkseed@", "/tmp/test-project/mkseed.nix")
 machine.copy_from_host("@testflake@", "/tmp/test-project/flake.nix")
 
 # initialize git so Nix sees the files in the flake
 machine.succeed("cd /tmp/test-project && git init && git add .")
 
-# run nix eval inside the container to verify flake evaluation works
+# run nix eval inside the seed to verify flake evaluation works
 machine.succeed(
     " ".join(
         (
@@ -31,4 +31,3 @@ machine.succeed(
         )
     )
 )
-

@@ -8,7 +8,7 @@ struct Message {
 
 fn main() {
     let msg = Message {
-        text: String::from("Nix Zero Setup"),
+        text: String::from("Nix Seed"),
         author: String::from("King Art"),
     };
 

@@ -1,4 +1,5 @@
 /.env
+/.env.artstd
 /.gemini/
 /.nvim.local.lua
 /.pre-commit-config.yaml

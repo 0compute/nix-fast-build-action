@@ -1,4 +1,4 @@
-{ pkgs, mkBuildContainer }:
+{ pkgs, mkSeed }:
 pkgs.testers.runNixOSTest {
 
   name = "func";
@@ -16,13 +16,13 @@ pkgs.testers.runNixOSTest {
 
   testScript =
     let
-      img = mkBuildContainer {
+      img = mkSeed {
         inherit pkgs;
-        name = "nix-zero-setup";
+        name = "nix-seed";
       };
       tag = with img; "${imageName}:${imageTag}";
-      mkbuildcontainer = pkgs.writeText "mkbuildcontainer.nix" (
-        builtins.readFile ./../mkbuildcontainer.nix
+      mkseed = pkgs.writeText "mkseed.nix" (
+        builtins.readFile ./../mkseed.nix
       );
       testflake = pkgs.writeText "flake.nix" (
         builtins.readFile ./functional-flake.nix
@@ -30,7 +30,7 @@ pkgs.testers.runNixOSTest {
     in
     builtins.readFile (
       pkgs.replaceVars ./functional.py {
-        inherit img tag mkbuildcontainer testflake;
+        inherit img tag mkseed testflake;
       }
     );
 

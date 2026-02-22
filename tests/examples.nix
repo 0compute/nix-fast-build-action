@@ -1,5 +1,5 @@
 # e2e test: build all example projects
-{ pkgs, mkBuildContainer, flake-utils, pyproject-nix, system }:
+{ pkgs, mkSeed, flake-utils, pyproject-nix, system }:
 let
   inherit (pkgs) lib;
 
@@ -7,7 +7,7 @@ let
   availableInputs = {
     self = { };
     nixpkgs.legacyPackages.${system} = pkgs;
-    nix-zero-setup.lib = { inherit mkBuildContainer; };
+    nix-seed.lib = { inherit mkSeed; };
     inherit flake-utils pyproject-nix;
   };
 
@@ -22,24 +22,25 @@ let
       flake = import (examplesDir + "/${name}/flake.nix");
       outputs = flake.outputs availableInputs;
     in
-    outputs.packages.${system}.nix-build-container;
+    outputs.packages.${system}.seed;
 
-  containers = map (name: {
-    inherit name;
-    container = buildExample name;
-  }) exampleNames;
+  seeds =
+    map
+      (name: {
+        inherit name;
+        seed = buildExample name;
+      })
+      exampleNames;
 
 in
-pkgs.runCommand "examples"
-  {
-    passAsFile = [ "containerList" ];
-    containerList = lib.concatMapStringsSep "\n" (c: "${c.name}=${c.container}") containers;
-  }
-  ''
-    echo "Building example containers..."
-    while IFS='=' read -r name path; do
-      test -f "$path" || { echo "FAIL: $name ($path)"; exit 1; }
-      echo "OK: $name"
-    done < "$containerListPath"
-    mkdir -p $out
-  ''
+pkgs.runCommand "examples" {
+  passAsFile = [ "seedList" ];
+  seedList = lib.concatMapStringsSep "\n" (s: "${s.name}=${s.seed}") seeds;
+} ''
+  echo "Building example seeds..."
+  while IFS='=' read -r name path; do
+    test -f "$path" || { echo "FAIL: $name ($path)"; exit 1; }
+    echo "OK: $name"
+  done < "$seedListPath"
+  mkdir -p $out
+''

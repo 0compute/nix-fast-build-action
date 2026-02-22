@@ -1,11 +1,11 @@
 {
-  description = "Example Rust project using nix-zero-setup";
+  description = "Example Rust project using nix-seed";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    nix-zero-setup = {
-      url = "github:your-org/nix-zero-setup";
+    nix-seed = {
+      url = "github:your-org/nix-seed";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -27,7 +27,7 @@
       {
         packages = {
           inherit default;
-          nix-build-container = inputs.nix-zero-setup.lib.mkBuildContainer {
+          seed = inputs.nix-seed.lib.mkSeed {
             inherit pkgs;
             name = "rust-build-env";
             inputsFrom = [ default ];

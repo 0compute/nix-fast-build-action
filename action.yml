@@ -1,13 +1,27 @@
-name: Nix Zero Setup
-description: Build and push pre-baked Nix environments to GHCR
+name: Nix Seed
+description: Build and push Nix Seed environments to GHCR
 
 inputs:
+  nix_conf:
+    description: Extra nix.conf entries
   github_token:
-    description: GitHub Token for GHCR authentication
-    required: true
-  container_attr:
-    description: Flake package attribute of the build container
-    default: .#nix-build-container
+    description: GitHub Token for GHCR Publish
+  tags:
+    description: Extra tags (space-separated)
+  tag_latest:
+    description: Apply the latest tag (use only when tagging the manifest)
+    default: "false"
+  registry:
+    description: Container registry (default ghcr.io)
+    default: ghcr.io
+  cachix_name:
+    description: Cachix cache name
+    default: ${{ github.event.repository.name }}
+  cachix_token:
+    description: Cachix auth token
+  seed_attr:
+    description: Flake package attribute of the build seed
+    default: .#seed
 
 runs:
   using: composite
@@ -15,21 +29,38 @@ runs:
     - name: Nix Setup
       uses: cachix/install-nix-action@v31
       with:
-        extra_nix_config: ${{ inputs.nix_conf }}
+        extra_nix_config: |
+          experimental-features = nix-command flakes
+          ${{ inputs.nix_conf }}
+        cachix_name: ${{ inputs.cachix_name }}
+        cachix_auth_token: ${{ inputs.cachix_token }}
 
-    - name: Build and Push Container
+    - name: Build seed
       shell: bash
-      run: |-
-        # build
-        nix build ${{ inputs.container_attr }}
-        docker load < result
-        # tag
-        name=ghcr.io/${{ github.repository }}
-        for tag in ${{ github.sha }} $(git describe --tags --always) latest; do
-          docker tag ${{ github.event.repository.name }}:${{ github.sha }} $name:$tag
+      run: |
+        set -euo pipefail
+        nix build "${{ inputs.seed_attr }}"
+
+    - name: GHCR Publish
+      if: ${{ inputs.github_token != '' }}
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        image_ref=$(docker load < result | sed -n 's/^Loaded image: //p')
+        name=${{ inputs.registry }}/${{ github.repository }}
+        docker tag "$image_ref" "$name:${{ github.sha }}"
+        tags="$(git describe --tags --always) ${{ inputs.tags }}"
+        if [ "${{ inputs.tag_latest }}" = "true" ]; then
+          tags="$tags latest"
+        fi
+        for tag in $tags; do
+          [ -z "$tag" ] && continue
+          docker tag "$image_ref" "$name:$tag"
         done
-        # push
-        docker login ghcr.io \
-          --username ${{ github.actor }} \
-          --password-stdin <<< ${{ inputs.github_token }}
-        docker push --all-tags $name
+        echo "$GITHUB_TOKEN" \
+          | docker login ghcr.io \
+              --username ${{ github.actor }} \
+              --password-stdin
+        docker push --all-tags "$name"

@@ -33,8 +33,7 @@
           cacert = {
             outPath = "/etc/ssl/certs";
           };
-          dockerTools.buildLayeredImageWithNixDb =
-            args:
+          dockerTools.buildLayeredImage = args:
             derivation {
               name = args.name;
               builder = "/bin/bash";
@@ -46,11 +45,11 @@
               PATH = "/bin";
             };
         };
-        mkBuildContainer = import ./mkbuildcontainer.nix;
+        mkSeed = import ./mkseed.nix;
       in
-      mkBuildContainer {
+      mkSeed {
         inherit pkgs;
-        name = "test-container";
+        name = "test-seed";
         inputsFrom = [ pkgs.coreutils ];
       };
   };

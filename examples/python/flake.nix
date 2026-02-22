@@ -1,5 +1,5 @@
 {
-  description = "Example Python ML project using pyproject.nix and nix-zero-setup";
+  description = "Example Python ML project using pyproject.nix and nix-seed";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
@@ -8,8 +8,8 @@
       url = "github:nix-community/pyproject.nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    nix-zero-setup = {
-      url = "github:your-org/nix-zero-setup";
+    nix-seed = {
+      url = "github:your-org/nix-seed";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -31,7 +31,7 @@
         packages = {
           default = pythonEnv;
 
-          nix-build-container = inputs.nix-zero-setup.lib.mkBuildContainer {
+          seed = inputs.nix-seed.lib.mkSeed {
             inherit pkgs;
             name = "ml-build-env";
             inputsFrom = [ pythonEnv ];

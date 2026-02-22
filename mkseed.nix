@@ -6,7 +6,7 @@
   # name from flake default package or first inputsFrom
   name ? (
     let
-      base = "nix-build-container";
+      base = "seed";
     in
     if self != null then
       self.packages.${pkgs.stdenv.hostPlatform.system}.default.pname
@@ -22,6 +22,7 @@
   nixConf ? ''
     experimental-features = nix-command flakes
   '',
+  substitutes ? false,
   # these are tiny and make debug much easier - override to empty if desired
   debugTools ? with pkgs; [
     bashInteractive
@@ -73,19 +74,14 @@ let
           else
             let
               getDerivations =
-                attr:
-                lib.filter selfFilter (
-                  lib.attrValues (self.${attr}.${system} or { })
-                );
+                attr: lib.filter selfFilter (lib.attrValues (self.${attr}.${system} or { }));
             in
             getDerivations "packages"
             ++ getDerivations "checks"
             # Apps have { type = "app"; program = "..."; }.
             # Extract if there's a package attr.
             ++ lib.filter (drv: lib.isDerivation drv && selfFilter drv) (
-              map
-                (app: app.package or null)
-                (lib.attrValues (self.apps.${system} or { }))
+              map (app: app.package or null) (lib.attrValues (self.apps.${system} or { }))
             )
         )
       )
@@ -93,30 +89,30 @@ let
     ++ args.contents or [ ];
 
   config = lib.recursiveUpdate {
-    Entrypoint = [ (lib.getExe nix) ];
+    Entrypoint = [ "/bin/bash" ];
     Env = lib.mapAttrsToList (name: value: "${name}=${value}") {
       HOME = "/tmp";
       USER = "root";
       GIT_TEXTDOMAINDIR = "${pkgs.git}/share/locale";
       GIT_INTERNAL_GETTEXT_TEST_FALLBACKS = "";
       # requires "sandbox = false" because unprivileged containers lack the
-      # kernel privileges (unshare for namespaces) required to create it
+      # namespace privileges required to create it
+      # AGENT: is this true and/or necessary?
       # we also disable build-users-group because containers often lack them
       NIX_CONFIG = ''
         sandbox = false
         build-users-group =
+        substitutes = ${lib.boolToString substitutes}
         ${nixConf}
       '';
       LD_LIBRARY_PATH =
-        "/lib:/lib64:/lib/"
-        + pkgs.stdenv.hostPlatform.linuxArch
-        + "-linux-gnu";
+        "/lib:/lib64:/lib/" + pkgs.stdenv.hostPlatform.linuxArch + "-linux-gnu";
       SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
-      PATH = "/bin:/usr/bin:/sbin:/usr/sbin";
+      PATH = "${./bin}:/bin:/usr/bin:/sbin:/usr/sbin";
     };
   } (args.config or { });
 
-  image = pkgs.dockerTools.buildLayeredImageWithNixDb (
+  image = pkgs.dockerTools.buildLayeredImage (
     (lib.removeAttrs args [
       "config"
       "contents"
@@ -160,6 +156,6 @@ let
     }
   );
 in
-# expose metadata for unit testing and inspection. buildLayeredImageWithNixDb
-# does not support passthru or automatically export its internal arguments
+# expose metadata for unit testing and inspection. buildLayeredImage does not
+# support passthru or automatically export its internal arguments
 image // { inherit contents config corePkgs; }

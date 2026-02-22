@@ -9,7 +9,7 @@ on:
     paths-ignore: *paths-ignore
   workflow_run:
     workflows:
-      - Build Container
+      - Build Seed
     types:
       - completed
 

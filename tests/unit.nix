@@ -1,11 +1,11 @@
-{ pkgs, mkBuildContainer }:
+{ pkgs, mkSeed }:
 let
 
   results = pkgs.lib.runTests {
     testEnvConfig = {
       expr =
         pkgs.lib.sort (left: right: left < right)
-          (mkBuildContainer {
+          (mkSeed {
             inherit pkgs;
             inputsFrom = [ pkgs.hello ];
             nixConf = "extra-features = nix-command";
@@ -19,6 +19,7 @@ let
           "NIX_CONFIG="
           + "sandbox = false\n"
           + "build-users-group =\n"
+          + "substitutes = false\n"
           + "extra-features = nix-command\n"
         )
         "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
@@ -27,22 +28,26 @@ let
           + pkgs.stdenv.hostPlatform.linuxArch
           + "-linux-gnu"
         )
-        "PATH=/bin:/usr/bin:/sbin:/usr/sbin"
+        (
+          "PATH="
+          + (toString (builtins.path { path = ./../bin; name = "bin"; }))
+          + ":/bin:/usr/bin:/sbin:/usr/sbin"
+        )
       ];
     };
 
     testDefaultName = {
       expr =
-        (mkBuildContainer {
+        (mkSeed {
           inherit pkgs;
           inputsFrom = [ pkgs.hello ];
         }).name;
-      expected = "hello-nix-build-container.tar.gz";
+      expected = "hello-seed.tar.gz";
     };
 
     testCustomName = {
       expr =
-        (mkBuildContainer {
+        (mkSeed {
           inherit pkgs;
           name = "custom";
         }).name;
@@ -61,7 +66,7 @@ let
           version = "1.0";
           nativeBuildInputs = with pkgs; [ ripgrep ];
         };
-        container = mkBuildContainer {
+        seed = mkSeed {
           inherit pkgs;
           inputsFrom = [
             drv1
@@ -71,9 +76,9 @@ let
         };
       in
       {
-        expr = container.contents;
+        expr = seed.contents;
         expected =
-          container.corePkgs
+          seed.corePkgs
           ++ (with pkgs; [
             hello
             ripgrep
@@ -88,16 +93,16 @@ let
           version = "1.0";
           buildInputs = with pkgs; [ hello ];
         };
-        container = mkBuildContainer {
+        seed = mkSeed {
           inherit pkgs;
           inputsFrom = [ drv ];
           contents = with pkgs; [ jq ];
         };
       in
       {
-        expr = container.contents;
+        expr = seed.contents;
         expected =
-          container.corePkgs
+          seed.corePkgs
           ++ (with pkgs; [
             hello
             jq
