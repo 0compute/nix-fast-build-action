@@ -2,75 +2,61 @@
 
 Hermetic. Deterministic. Cacheable. Fast.
 
+![XKCD Compiling](https://imgs.xkcd.com/comics/compiling.png "Not any more, fuckers. Get
+back to work!")
+
 ## Overview
 
-`Nix Seed` provides OCI build containers with the flake input graph baked in.
-Extreme cacheability is a core principle.
+`Nix Seed` provides hermetic OCI containers for Nix Flake build and run.
 
-- **Build seeds:** hermetic, full-featured; include base, library, apps, checks,
-  devShells, overlays.
-- **Runtime seeds:** hermetic and slim; include base, library, and apps.
-  Optional musl variant is available for smaller runtimes. Containers are e
+- **Build:** includes full flake inputs graph. Does does not require net.
+- **Run:** slim; includes package and runtime inputs only. Optional musl variant
+  is available for slim++.
 
 Nix Seed targets fast rebuilds when cached without compromising hermeticity or
-reproducibility Nix in the container is configured with `substitutes = false` so
-builds do not require network.
+reproducibility. Nix in the container is configured with `substitutes = false`,
+so builds do not require network. Nix Seed pins all inputs for deterministic,
+cacheable builds, so rebuilds are quick when layers are unchanged.
 
-pins all inputs for deterministic, cacheable builds, so rebuilds are quick
+## Extreme Cacheability
 
-when layers are unchanged.
+Extreme cacheability is a core principle.
 
-![XKCD Compiling](https://imgs.xkcd.com/comics/compiling.png)
-
-> > Not any more fuckers. Work Harder.
-
-**By using pre-baked OCI layers, .** Hermetic builds isolate from host and
-network influences; reproducible builds aim for identical outputs when inputs
-and tooling are pinned.
+**By using pre-baked OCI layers,** hermetic builds isolate from host and network
+influences; reproducible builds aim for identical outputs when inputs and
+tooling are pinned.
 
 **Note:** Base layers use a minimized Nixpkgs derivation. Size depends on the
 package set but remains fully Nix-native.
 
-## Quick Start
-
-Build the default seed and load it into Docker:
-
-```sh
-nix build .#seed
-docker load < result
-```
-
-List loaded images:
-
-```sh
-docker image list
-```
-
 ### Comparison with Nix Community / GH Actions Caches
 
-| Feature | Nix Seed (pre-baked layers) | Standard caches | | --- | --- | --- |
-| Hermetic build | ✅ fully isolated | ⚠ may fetch missing paths | | Reproducible
-| ✅ pinned inputs/tools | ⚠ host/tool differences | | Incremental rebuilds | ✅
-only changed layers | ⚠ larger rebuild surface | | Multi-layer reuse | ✅ base,
-libs, apps, checks, devShells, overlays | ❌ flat cache | | Cache keys | ✅ flake
-input hash per layer | ⚠ ad hoc or per-derivation | | Network dependency | ❌
-offline possible | ⚠ remote caches; bandwidth + untar CPU | | Developer speed |
-✅ near-instant when cached | ⚠ slower; more network and CPU |
+| Feature | Nix Seed (pre-baked layers) | Standard caches |
+| --- | --- | --- |
+| Hermetic build | ✅ fully isolated | ⚠ may fetch missing paths |
+| Reproducible | ✅ pinned inputs/tools | ⚠ host/tool differences |
+| Incremental rebuilds | ✅ only changed layers | ⚠ larger rebuild surface |
+| Multi-layer reuse | ✅ base, libs, apps, checks, devShells, overlays | ❌ flat cache |
+| Cache keys | ✅ flake input hash per layer | ⚠ ad hoc or per-derivation |
+| Network dependency | ❌ offline possible | ⚠ remote caches; bandwidth + untar CPU |
+| Developer speed | ✅ near-instant when cached | ⚠ slower; more network and CPU |
 
 **Summary:** Nix Seed turns the pinned dependency graph into reusable OCI
-layers, not single store paths. That yields faster, hermetic, reproducible
-builds, without the setup tax of repeatedly populating per-run Nix caches in
-typical GitHub Actions flows.
+layers, not single store paths. That yields faster builds without the setup tax
+of repeatedly populating per-run Nix caches in typical GitHub Actions flows.
 
-## Layer -> OCI -> Cache Diagram
+## Layer to OCI to Cache Diagram
 
 Split output/layer to OCI layer to cache key mapping:
 
-| Output or layer | OCI layer | Cache key | | --- | --- | --- | | base | Layer 1
-| hash(base + inputs) | | library | Layer 2 | hash(library + inputs) | | apps |
-Layer 3 | hash(apps + scripts) | | checks | Layer 4 | hash(tests + deps) | |
-devShells | Layer 5 | hash(dev tools + notebooks) | | overlays | Layer 6 |
-hash(overlays) |
+| Output or layer | OCI layer | Cache key |
+| --- | --- | --- |
+| base | Layer 1 | hash(base + inputs) |
+| library | Layer 2 | hash(library + inputs) |
+| apps | Layer 3 | hash(apps + scripts) |
+| checks | Layer 4 | hash(tests + deps) |
+| devShells | Layer 5 | hash(dev tools + notebooks) |
+| overlays | Layer 6 | hash(overlays) |
 
 - Runtime seed: base + library + apps.
 - Build seed: all layers for hermetic, cacheable builds.
@@ -79,7 +65,7 @@ hash(overlays) |
 
 Nix Seed supports split outputs per derivation to implement layers
 automatically. Users can define dependencies in standard layer names, and Nix
-Seed will produce hermetic, cacheable layers.
+Seed will produce cacheable layers.
 
 Usage outline:
 
@@ -95,25 +81,45 @@ Usage outline:
 
 let
   standardLayers = {
-    base = [ pkgs.python pkgs.gcc pkgs.coreutils ];
-    library = [ pkgs.numpy pkgs.pandas pkgs.matplotlib ];
-    apps = [ ./my-script ./my-model ];
-    checks = [ ./tests ];
-    devShells = [ pkgs.jupyter pkgs.streamlit ];
-    overlays = [ ./my-overlay ];
+    base = pkgs.buildEnv {
+      name = "layer-base";
+      paths = [ pkgs.python pkgs.gcc pkgs.coreutils ];
+    };
+    library = pkgs.buildEnv {
+      name = "layer-library";
+      paths = [ pkgs.numpy pkgs.pandas pkgs.matplotlib ];
+    };
+    apps = pkgs.buildEnv {
+      name = "layer-apps";
+      paths = [ ./my-script ./my-model ];
+    };
+    checks = pkgs.buildEnv {
+      name = "layer-checks";
+      paths = [ ./tests ];
+    };
+    devShells = pkgs.buildEnv {
+      name = "layer-devshells";
+      paths = [ pkgs.jupyter pkgs.streamlit ];
+    };
+    overlays = pkgs.buildEnv {
+      name = "layer-overlays";
+      paths = [ ./my-overlay ];
+    };
   };
+
+  layerNames = builtins.attrNames standardLayers;
 
 in
   pkgs.stdenv.mkDerivation {
     name = "nix-seed-standard-layers";
-    outputs = builtins.attrNames standardLayers;
+    outputs = layerNames;
 
-    buildCommand = ''
-      for layer in ${builtins.concatStringsSep " " (builtins.attrNames standardLayers)}; do
-        mkdir -p $out/$layer
-        cp -r ${standardLayers.$layer}/* $out/$layer/
-      done
-    '';
+    buildCommand = builtins.concatStringsSep "\n" (map
+      (layer: ''
+        mkdir -p $out/${layer}
+        cp -r ${standardLayers.${layer}}/* $out/${layer}/
+      '')
+      layerNames);
   }
 ```
 
@@ -164,8 +170,9 @@ build and publish images with pinned inputs and cacheable layers.
 Example workflow using the local composite action:
 
 ```yaml
+---
 name: build
-on: [push]
+"on": [push]
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -183,8 +190,9 @@ jobs:
 Example workflow using a published action (replace the ref):
 
 ```yaml
+---
 name: build
-on: [push]
+"on": [push]
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -258,84 +266,104 @@ TODO: SBOM
 
 ## Trust No Fucker
 
-> "The code was clean, the build hermetic, but the compiler was pwned.
->
-> Just because you're paranoid doesn't mean they aren't out to fuck you."
-> — **Apologies to Joseph Heller, *Catch-22* (1961)**
+"The code was clean, the build hermetic, but the compiler was pwned.
 
-Even with attested, hermetic, and deterministic builds, attacks like Ken Thompson's
-[Trusting Trust](https://dl.acm.org/doi/10.1145/358198.358210) remain a concern. A
-rigged build environment can undetectably inject code during compilation.
+Just because you're paranoid doesn't mean they aren't out to fuck you." —
+**Apologies to Joseph Heller, *Catch-22* (1961)**
+
+Even with attested, hermetic, and deterministic builds, attacks like Ken
+Thompson's [Trusting Trust](https://dl.acm.org/doi/10.1145/358198.358210) remain
+a concern. A rigged build environment can undetectably inject code during
+compilation.
 
 Assume that any build environment can and will be compromised.
 
 ### Transparency
 
-Use Sigstore (cosign) to issue In-Toto statements. Every build records its {commit,
-system, narHash} in a public ledger (Rekor).
+Use Sigstore (cosign) to issue In-Toto statements. Every build records its
+{commit, system, narHash} in a public ledger (Rekor).
 
 ### Immutable Promotion (EVM L2)
 
-Promotion of a build is not a manual flag but a cryptographic event. A quorum ($n$ of
-$m$) of independent builders must agree on the narHash before the mapping is anchored
-into a smart contract on an L2 blockchain.
+Promotion of a build is not a manual flag but a cryptographic event. A quorum
+($n$ of $m$) of independent builders must agree on the narHash before the
+mapping is anchored into a smart contract on an L2 blockchain.
 
 ```solidity
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
 /**
-* @title TNFArtifactRegistry
-* @dev Anchors a mapping of commit+system to a narHash once quorum is reached.
-*/
+ * @title TNFArtifactRegistry
+ * @dev Anchors a mapping of commit+system to a narHash once quorum is reached.
+ */
 contract TNFArtifactRegistry {
-// commitHash + system (e.g., x86_64-linux) -> narHash
-mapping(bytes32 => string) public promotedBuilds;
+  // commitHash + system (e.g., x86_64-linux) maps to narHash
+  mapping(bytes32 => string) public promotedBuilds;
 
-// Authorization: Only the Watchdog/Multisig can anchor a promotion
-address public watchdog;
+  // Authorization: Only the Watchdog/Multisig can anchor a promotion
+  address public watchdog;
 
-event BuildPromoted(bytes32 indexed buildKey, string narHash);
+  event BuildPromoted(bytes32 indexed buildKey, string narHash);
 
-constructor(address _watchdog) {
+  constructor(address _watchdog) {
     watchdog = _watchdog;
-}
+  }
 
-/**
-* @notice Records the narHash once the off-chain Watchdog verifies n-of-m Rekor attestations.
-* @param _commit The git commit hash
-* @param _system The Nix system tuple
-* @param _narHash The resulting Nix Archive hash
-*/
-function anchorPromotion(bytes32 _commit, string calldata _system, string calldata _narHash) external {
+  /**
+   * @notice Records the narHash once the off-chain Watchdog verifies n-of-m
+   * Rekor attestations.
+   * @param _commit The git commit hash
+   * @param _system The Nix system tuple
+   * @param _narHash The resulting Nix Archive hash
+   */
+  function anchorPromotion(
+    bytes32 _commit,
+    string calldata _system,
+    string calldata _narHash
+  ) external {
     require(msg.sender == watchdog, "TNF: Unauthorized caller");
-    
+
     bytes32 buildKey = keccak256(abi.encodePacked(_commit, _system));
-    
+
     // Ensure immutability: once anchored, it cannot be "re-pwned"
-    require(bytes(promotedBuilds[buildKey]).length == 0, "TNF: Build already anchored");
+    require(
+      bytes(promotedBuilds[buildKey]).length == 0,
+      "TNF: Build already anchored"
+    );
 
     promotedBuilds[buildKey] = _narHash;
     emit BuildPromoted(buildKey, _narHash);
-}
+  }
 }
 ```
 
-Gas economics matter: because every promotion writes to an L2 registry, prefer batching
-promotions under a Merkle root and reuse the cheapest finality window (e.g., optimistic
-rollups). Estimate ~50k gas per `anchorPromotion` call, so at 0.5 gwei (~0.0000000005
-ETH) the per-hash cost is under $0.03 on current rollups; adjust the gas limit if the L2
-gas price spikes to keep per-hash gas cost predictable and low.
+Gas economics matter: because every promotion writes to an L2 registry, prefer
+batching promotions under a Merkle root and reuse the cheapest finality window
+(e.g., optimistic rollups). Estimate ~50k gas per `anchorPromotion` call, so at
+0.5 gwei (~0.0000000005 ETH) the per-hash cost is under $0.03 on current
+rollups; adjust the gas limit if the L2 gas price spikes to keep per-hash gas
+cost predictable and low.
+
+### TODO: Verification & Anchor
+
+- **Deploy Registry:** Deploy the `TNFArtifactRegistry` to an EVM L2.
+- **Watchdog (Rust):** Implement the off-chain observer using `sigstore-rs` to
+  poll Rekor and verify quorum.
+- **License Audit:** To maintain a zero-litigation surface area.
+- **Full-Source Bootstrap:** Transition the toolchain to a human-auditable
+  stage0 hex seed.
 
 ### Endgame
 
-With [nixpkgs full-source
-  bootstrap](https://discourse.nixos.org/t/a-full-source-bootstrap-for-nixos/)
-this is endgame for supply chain security.
+With
+[nixpkgs full-source bootstrap](https://discourse.nixos.org/t/a-full-source-bootstrap-for-nixos/)
+the toolchain starts with this is endgame for supply chain security.
 
 ## Legal Compliance
 
 Lawyers fuck you twice as hard.
 
-Nix Seed is legally unimpeachable. Upstream license terms for non-redistributable SDKs
-are fully respected, leaving zero surface area for litigation.
+Nix Seed is legally unimpeachable. Upstream license terms for
+non-redistributable SDKs are fully respected, leaving zero surface area for
+litigation.
