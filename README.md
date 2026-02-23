@@ -1,45 +1,41 @@
 # Nix Seed
 
-Nix Seed provides near-instant, cryptographically attestable CI builds.
+Nix Seed provides fast-start build and run containers with n-of-m quorum build
+validation.
 
-## Mission
+## Purity Ain't Free
 
-### Problem: Purity Ain't Free
-
-Nix purity guarantees come with a tax in non-native ephemeral environments: every
-derivation must be fetched, materialized, and verified before it can be trusted. Missing
-inputs force CI runs to substitute from binary caches or rebuild from source, which
-delays the job, fragments caches, and burns network/CPU. The more dependencies a project
-has, the more often CI stalls on the download/unpack/verify loop instead of the actual
-build.
+Nix purity guarantees come with a tax in non-native ephemeral environments. Since there
+is no local store every derivation must be fetched, materialized, and verified before it
+can be trusted. Missing inputs force CI runs to substitute from binary caches or rebuild
+from source, which delays the job by burning network/CPU. 
 
 For GitHub CI, [Cache Nix Action](https://github.com/nix-community/cache-nix-action) and
 [Nix Magic Cache](https://github.com/DeterminateSystems/magic-nix-cache-action) reduce
 the need to reach outside of GitHub's backbone, but are still largely network and CPU
 bound.
 
-<!-- TODO: real numbers -->
+## Trusting Trust
 
-Time-to-build with no input changes: >60s
+> The code was clean, the build hermetic, but the compiler was pwned.
 
-### Solution: Seed Containers
+Even with hermetic and deterministic builds, attacks like Ken Thompson's
+[Trusting Trust](https://dl.acm.org/doi/10.1145/358198.358210) remain a concern. A
+rigged build environment that undetectably injects code during compilation is always a
+possibility.
 
-Nix Seed provides layered OCI build containers with the flake inputs closure baked in.
+## Containers
+
+Layered OCI build containers with the flake inputs closure baked in.
 Unchanged layers are reused across builds, which yields extreme cacheability without
 relaxing hermeticity. A commit that changes app code without modifying inputs, which
 will be most of them, starts its CI build near instantly because all of the other layers
 are already cached. Publishing to GHCR keeps images close to GitHub-hosted runners,
 reducing pull time and cold-start overhead.
 
-<!-- TODO: real numbers -->
+### Seed
 
-Time-to-build with no input changes: \<5s
-
-#### Layer breakdown
-
-##### Seed container
-
-- **base**: libc, CA certs, readonly shell foundation shared by every image.
+- **base**: libc, CA certs, readonly shell
 - **toolchain**: nix, glibc, libstdc++, compilers, debug tools.
 - **build/input layers**:
   - **packages**: foundational derivations at the bottom of the stack.
@@ -48,37 +44,20 @@ Time-to-build with no input changes: \<5s
   - **devShells**: developer tooling after the main outputs.
 - **container**: container glue (entrypoint, env configuration).
 
-##### Run container
+### Run
 
 - **base**: shared
 - **lib**: app runtime dependencies
 - **app**: app
 - **container**: container glue (entrypoint, env configuration).
 
-### Problem: Trusting Trust
+## Trust No Fucker
 
-> The code was clean, the build hermetic, but the compiler was pwned.
->
-> Just because you're paranoid doesn't mean they aren't out to fuck you.
+This is Endgame for supply chain security: each build is attested step explicitly
+surfaces its inputs and attestations for downstream to verify.
 
-**Apologies to Joseph Heller, *Catch-22* (1961)**
-
-Even with hermetic and deterministic builds, attacks like Ken Thompson's
-[Trusting Trust](https://dl.acm.org/doi/10.1145/358198.358210) remain a concern. A
-rigged build environment that undetectably injects code during compilation is always a
-possibility.
-
-### Solution: Trust No Fucker
-
-This is Endgame for supply chain security: every stage explicitly surfaces its inputs
-and attestations so downstream users can verify what they run.
-
-#### 1. Bootstrap
-
-Nixpkgs uses full-source bootstrap which starts with a
-[human-auditable stage0 hex seed](https://github.com/NixOS/nixpkgs/blob/master/pkgs/os-specific/linux/minimal-bootstrap/stage0-posix/hex0.nix).
-
-#### 2. Provenance
+1. Nixpkgs full-source bootstrap with a
+   [human-auditable stage0 hex seed](https://github.com/NixOS/nixpkgs/blob/master/pkgs/os-specific/linux/minimal-bootstrap/stage0-posix/hex0.nix).
 
 Each container records:
 
@@ -88,6 +67,8 @@ Each container records:
 - narHash: represents the absolute derivation of the image
 - layerHashes: identify each OCI layer
 - builder identity: who performed the build
+
+See [publish](./bin/publish) for full details.
 
 The builder signs these facts and embeds the signatures as OCI attestation artifacts.
 Downstream operators can fetch the attestation with the image metadata to confirm each
@@ -99,13 +80,13 @@ each attestation, issues a verifiable timestamp, and lets auditors fetch the pro
 without pulling every image layer — this provides an extra layer of transparency and
 tamper-evidence for the provenance facts.
 
-#### 3. Transparency
+### 3. Transparency
 
 Supply-side transparency leans on Sigstore (cosign) and Rekor; every build publishes
 statements that tie {commit, system, narHash} to the attested image, keeping the ledger
 of provenance public and replayable.
 
-#### 4. Immutable promotion
+### 4. Immutable promotion
 
 Immutable promotion means anchoring a Merkle root over all systems’ narHashes for a
 commit, publishing that root into a public ledger keyed by the commit and the root, and
