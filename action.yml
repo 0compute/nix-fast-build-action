@@ -2,25 +2,29 @@ name: Nix Seed
 description: Build and push Nix Seed environments to GHCR
 
 inputs:
+
   nix_conf:
     description: Extra nix.conf entries
-  github_token:
-    description: GitHub Token for GHCR Publish
-  tags:
-    description: Extra tags (space-separated)
-  tag_latest:
-    description: Apply the latest tag (use only when tagging the manifest)
-  registry:
-    description: Container registry (default ghcr.io)
-    default: ghcr.io
-  cachix_name:
-    description: Cachix cache name
-    default: ${{ github.event.repository.name }}
-  cachix_token:
-    description: Cachix auth token
+
   seed_attr:
     description: Flake package attribute of the build seed
     default: .#seed
+
+  registry:
+    description: Container registry (default ghcr.io)
+    default: ghcr.io
+  registry_token:
+    description: Hub Token for registry login
+  tags:
+    description: Extra tags (space-separated)
+
+  cachix_name:
+    description: Cachix cache name
+    default: ${{ github.event.repository.name }}
+  cachix_auth_token:
+    description: Cachix auth token
+  cachix_signing_key:
+    description: Cachix signing key
 
 runs:
   using: composite
@@ -31,16 +35,32 @@ runs:
         extra_nix_config: |
           experimental-features = nix-command flakes
           ${{ inputs.nix_conf }}
-        cachix_name: ${{ inputs.cachix_name }}
-        cachix_auth_token: ${{ inputs.cachix_token }}
+
+    - name: Cachix Setup
+      if: ${{ inputs.cachix_token != '' }}
+      uses: cachix/cachix-action@v16
+      with:
+        name: ${{ inputs.cachix_name }}
+        authToken: ${{ inputs.cachix_auth_token }}
+        signingKey: ${{ inputs.cachix_signing_key }}
 
     - name: Build seed
       shell: bash
       run: nix build "${{ inputs.seed_attr }}"
+
     - name: GHCR Publish
-      if: ${{ inputs.github_token != '' }}
+      if: ${{ inputs.registry_token != '' }}
       env:
         DOCKER_USER: ${{ github.actor }}
-        DOCKER_TOKEN: ${{ inputs.github_token }}
+        DOCKER_TOKEN: ${{ inputs.registry_token }}
       shell: bash
-      run: bin/publish-seed ${{ inputs.registry }}/${{ github.repository }} ${{ github.sha }}
+      run: |-
+        set -euo pipefail
+        tags=()
+        if [[ -n "${{ inputs.tags }}" ]]; then
+          read -ra parsed_tags <<< "${{ inputs.tags }}"
+          for tag in "${parsed_tags[@]}"; do
+            tags+=(--tag "$tag")
+          done
+        fi
+        nix run .#publish "${tags[@]}" ${{ inputs.registry }}/${{ github.repository }} ${{ github.sha }}

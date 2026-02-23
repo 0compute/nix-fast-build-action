@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<EOF
+Usage:
+  publish IMAGE_NAME COMMIT_SHA
+Options:
+  --tag TAG            add an extra tag such as IMAGE_NAME:latest
+  --registry REGISTRY
+    registry to log into and use for pushing (default: ghcr.io)
+  --result RESULT      path to an existing docker load input (default: ./result)
+  --predicate-type TYPE
+    cosign predicate type for the attestation (default: nix-seed/provenance)
+  --builder-identity ID
+    explicit builder identity if it differs from context
+  --rekor-url URL       Rekor endpoint to log attestations (default: https://rekor.sigstore.dev)
+Args:
+  IMAGE_NAME  repository to push (e.g., ghcr.io/org/nix-seed)
+  COMMIT_SHA  git commit SHA for verification
+EOF
+}
+
+PARSED=$(
+  getopt \
+    --options '' \
+    --long tag:,registry:,result:,predicate-type:,builder-identity:,rekor-url: \
+    -- "$@"
+) || {
+  usage
+  exit 1
+}
+eval set -- "$PARSED"
+
+tags=()
+registry="ghcr.io"
+result=./result
+predicateType="nix-seed/provenance"
+builderIdentity=
+rekorUrl="https://rekor.sigstore.dev"
+while true; do
+  case "$1" in
+  --tag)
+    tags+=("$2")
+    shift 2
+    ;;
+  --registry)
+    registry=$2
+    shift 2
+    ;;
+  --result)
+    result=$2
+    shift 2
+    ;;
+  --predicate-type)
+    predicateType=$2
+    shift 2
+    ;;
+  --builder-identity)
+    builderIdentity=$2
+    shift 2
+    ;;
+  --rekor-url)
+    rekorUrl=$2
+    shift 2
+    ;;
+  --)
+    shift
+    break
+    ;;
+  *)
+    usage
+    exit 1
+    ;;
+  esac
+done
+
+if [[ $# -ne 2 ]]; then
+  usage
+  exit 1
+fi
+
+[[ -e $result ]] || {
+  echo >&2 "result path '$result' does not exist"
+  exit 1
+}
+[[ -n ${DOCKER_USER:-} && -n ${DOCKER_TOKEN:-} ]] || {
+  echo >&2 "DOCKER_USER and DOCKER_TOKEN must be set"
+  exit 1
+}
+
+name=$1
+commit=$2
+
+image=$(docker load --input "$result" | awk 'NR==1 {print $NF}')
+[[ $image =~ :$commit$ ]] || {
+  echo >&2 "commit mismatch 'image' != '$commit'"
+  exit 1
+}
+
+docker login \
+  --username "$DOCKER_USER" \
+  --password-stdin "$registry" \
+  <<<"$DOCKER_TOKEN"
+
+tags+=(
+  "$commit"
+  "$(git describe --tags --always)"
+)
+
+for tag in "${tags[@]}"; do
+  nametag="${name}:${tag}"
+  docker tag "$image" "$nametag"
+  docker push "$nametag"
+done
+
+image_ref="${name}:${commit}"
+
+if [[ -z ${builderIdentity} ]]; then
+  for candidate in BUILDER_IDENTITY GITHUB_ACTOR; do
+    value=${!candidate:-}
+    if [[ -n $value ]]; then
+      builderIdentity=$value
+      break
+    fi
+  done
+fi
+if [[ -z ${builderIdentity} ]]; then
+  builderIdentity=$(whoami)@$(hostname --fqdn)
+fi
+
+predicate="./${commit}.json"
+
+cat <<EOF >"$predicate"
+{
+  "schemaVersion": 1,
+  "predicateType": "$predicateType",
+  "timestamp": "$(date --utc +'%Y-%m-%dT%H:%M:%SZ')",
+  "image": "$image_ref",
+  "registry": "$registry",
+  "commit": "$commit",
+  "system": "$(nix eval --raw ".#seed.system")",
+  "narHash": "$(nix path-info --json "$result" | jq --raw-output '.[].narHash')",
+  "layerHashes": $(
+  tar --extract --file "$result" --to-stdout manifest.json |
+    jq --raw-output '.[0].Layers | map(split("/")[0]) | @json'
+),
+  "tags": $(
+  printf '%s\n' "${tags[@]}" | jq --raw-input '.' | jq --slurp '.'
+),
+  "builder": {
+    "identity": "$builderIdentity",
+    "actor": "${GITHUB_ACTOR:-}",
+    "repository": "${GITHUB_REPOSITORY:-}",
+    "workflow": "${GITHUB_WORKFLOW:-}",
+    "runId": "${GITHUB_RUN_ID:-}",
+    "event": "${GITHUB_EVENT_NAME:-}",
+    "ref": "${GITHUB_REF:-}"
+  }
+}
+EOF
+
+echo "written provenance proof to $predicate"
+
+cosign attest \
+  --rekor-url "$rekorUrl" \
+  --type "$predicateType" \
+  --predicate "$predicate" \
+  "$image_ref"
+
+cosign upload-blob \
+  --rekor-url "$rekorUrl" \
+  --artifact "$predicate"
