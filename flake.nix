@@ -46,21 +46,16 @@
 
       inherit (inputs) self;
 
-      overlays.default = _final: _prev: { };
-
       lib = { inherit mkSeed; };
 
       apps = pkgs: {
 
-        publish = {
+        publish-seed = {
           type = "app";
           program = pkgs.writeShellApplication {
             name = "publish";
             runtimeInputs = with pkgs; [ docker ];
-            text = ''
-              nix build .#seed
-              docker load < result
-            '';
+            text = builtins.readFile ./bin/publish-seed;
           };
         };
 

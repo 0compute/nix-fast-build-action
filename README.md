@@ -1,69 +1,43 @@
 # Nix Seed
 
-Hermetic. Deterministic. Unimpeachable.
+## Mission
 
-## Overview
+Nix Seed provides near-instant, cryptographically attestable CI builds.
 
-Nix Seed provides multi-arch / multi-platform hermetic OCI containers for flake
-build and run.
+This is Endgame for supply chain security.
 
-- **Build:** includes full flake input graph and Nix; does not require network
-  access.
-- **Run:** includes package and runtime inputs only.
+![XKCD Compiling](https://imgs.xkcd.com/comics/compiling.png "Not any more, fuckers. Get back to work.")
 
-## Layers and Extreme Cacheability
+### Problem: Purity Ain't Free
 
-Nix Seed maps flake outputs to OCI layers with stable, input-hashed boundaries.
-Unchanged layers are reused across builds, which yields extreme cacheability
-without relaxing hermeticity.
+The purity Nix guarantees carries a tax: every derivation must be fetched separately,
+materialized, and verified before it can be trusted. Missing inputs force CI runs to
+substitute from binary caches or rebuild from source, which delays the job, fragments
+caches across branches, and burns network/CPU. The more dependencies a project has, the
+more often CI stalls on the download/unpack/verify loop instead of the actual build.
 
-Layer scopes are explicit:
+For GitHub CI, [Cache Nix Action](https://github.com/nix-community/cache-nix-action) and
+[Nix Magic Cache](https://github.com/DeterminateSystems/magic-nix-cache-action) reduce
+the need to reach outside of GitHub's backbone, but are still largely network and CPU
+bound.
 
-- **Base:** minimal runtime environment.
-- **Toolchain:** compilers and build tools; build-only.
-- **Library:** shared language and numeric libraries.
-- **Apps:** project code, scripts, and models.
-- **Checks:** tests and validation outputs; build-only.
-- **DevShells:** development tools; build-only.
-- **Overlays:** version overrides and patches; build-only.
+<!-- TODO: real numbers -->
 
-## License
+Time-to-build with no input changes: 60s
 
-Licensed under the MIT License. Copyright 2026 Zero Compute Ltd.
+### Solution: Seed Containers
 
-## Attestation
+Nix Seed provides layered OCI build containers with the input graph baked in. Flake
+outputs are mapped to OCI layers with stable, input-hashed boundaries. Unchanged layers
+are reused across builds, which yields extreme cacheability without relaxing
+hermeticity. Publishing to GHCR keeps images close to GitHub-hosted runners, reducing
+pull time and cold-start overhead.
 
-Planned: expand this section.
+<!-- TODO: real numbers -->
 
-Containers (seeds) embed OCI attestations with this example payload:
+Time-to-build with no input changes: 5s
 
-```json
-{
-  "flakeHash": "sha256-flake-and-inputs",
-  "layerHashes": {
-    "base": "sha256",
-    "toolchain": "sha256",
-    "library": "sha256",
-    "apps": "sha256",
-    "checks": "sha256",
-    "devShells": "sha256",
-    "overlays": "sha256"
-  },
-  "seedDigest": "sha256",
-  "signature": "gpg-or-slsa",
-  "builtBy": "builder-identity",
-  "timestamp": "ISO8601"
-}
-```
-
-- `flakeHash`: inputs match the declared pinned flake.
-- `layerHashes`: each split output layer is unmodified.
-- `seedDigest`: final OCI image digest.
-- `signature`: optional GPG or SLSA signature for authenticity.
-
-Planned: add an SBOM.
-
-## Trust No Fucker
+### Problem: Trusting Trust
 
 "The code was clean, the build hermetic, but the compiler was pwned.
 
@@ -71,175 +45,108 @@ Just because you're paranoid doesn't mean they aren't out to fuck you."
 
 **Apologies to Joseph Heller, *Catch-22* (1961)**
 
-Even with hermetic, deterministic, and attested builds, attacks like Ken
-Thompson's [Trusting Trust](https://dl.acm.org/doi/10.1145/358198.358210) remain
-a concern. A rigged build environment can undetectably inject code during
-compilation.
+Even with hermetic and deterministic builds, attacks like Ken Thompson's
+[Trusting Trust](https://dl.acm.org/doi/10.1145/358198.358210) remain a concern. A
+rigged build environment that undetectably injects code during compilation is always a
+possibility.
 
-Assume that any build environment can and will be compromised.
+### Solution: Trust No Fucker
 
-### Transparency
+Nixpkgs uses full-source bootstrap which anchors the toolchain to a [human-auditable stage0 hex
+seed](https://github.com/NixOS/nixpkgs/blob/master/pkgs/os-specific/linux/minimal-bootstrap/stage0-posix/hex0.nix).
 
-Use Sigstore (cosign) to issue In-Toto statements. Every build records its
-{commit, system, narHash} in a public ledger (Rekor).
+Each container records the layer hashes, narHash, builder identity, and flake hash as
+part of its build, so emitting attestations simply signs and releases those facts. The
+provenance layer thus rides along with the cached layers.
 
-### Immutable Promotion (EVM L2)
+Supply-side transparency leans on Sigstore (cosign) and Rekor; every build publishes
+statements that tie {commit, system, narHash} to the attested image, keeping the ledger
+of provenance public and replayable.
 
-Promotion of a build is not a manual flag but a cryptographic event. A quorum
-($n$ of $m$) of independent builders must agree on the narHash before the
-mapping is anchored into a smart contract on an L2 blockchain.
-
-```solidity
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
-
-/**
- * @title TNFArtifactRegistry
- * @dev Anchors a mapping of commit+system to a narHash once quorum is reached.
- */
-contract TNFArtifactRegistry {
-  // commitHash + system (e.g., x86_64-linux) maps to narHash
-  mapping(bytes32 => string) public promotedBuilds;
-
-  // Authorization: Only the Watchdog/Multisig can anchor a promotion
-  address public watchdog;
-
-  event BuildPromoted(bytes32 indexed buildKey, string narHash);
-
-  constructor(address _watchdog) {
-    watchdog = _watchdog;
-  }
-
-  /**
-   * @notice Records the narHash once the off-chain Watchdog verifies n-of-m
-   * Rekor attestations.
-   * @param _commit The git commit hash
-   * @param _system The Nix system tuple
-   * @param _narHash The resulting Nix Archive hash
-   */
-  function anchorPromotion(
-    bytes32 _commit,
-    string calldata _system,
-    string calldata _narHash
-  ) external {
-    require(msg.sender == watchdog, "TNF: Unauthorized caller");
-
-    bytes32 buildKey = keccak256(abi.encodePacked(_commit, _system));
-
-    // Ensure immutability: once anchored, it cannot be "re-pwned"
-    require(
-      bytes(promotedBuilds[buildKey]).length == 0,
-      "TNF: Build already anchored"
-    );
-
-    promotedBuilds[buildKey] = _narHash;
-    emit BuildPromoted(buildKey, _narHash);
-  }
-}
-```
-
-Gas economics matter because every promotion writes to an L2 registry. Prefer
-batching promotions under a Merkle root and reuse the cheapest finality window
-(e.g., optimistic rollups). Estimate ~50k gas per `anchorPromotion` call, so at
-0.5 gwei (~0.0000000005 ETH) the per-hash cost is under $0.03 on current
-rollups; adjust the gas limit if the L2 gas price spikes to keep per-hash gas
-cost predictable and low.
-
-### Verification and Anchoring
-
-- **Deploy Registry:** Deploy the `TNFArtifactRegistry` to an EVM L2.
-- **Watchdog (Rust):** Implement the off-chain observer using `sigstore-rs` to
-  poll Rekor and verify quorum.
-- **License Audit:** Keep Watchdog build-time dependencies MIT to maintain a
-  zero-litigation surface area.
-
-### Endgame
-
-Nixpkgs full-source bootstrap anchors the toolchain to a human-auditable stage0
-hex seed. This is the endgame for supply chain security.
-
-### Legal Compliance
-
-Lawyers hit you twice as hard.
-
-Nix Seed is legally unimpeachable. Upstream license terms for
-non-redistributable SDKs are fully respected, leaving zero surface area for
-litigation.
+For the truly paranoid: Immutable promotion is anchoring a Merkle root over all systems’
+narHashes for a commit into a public ledger keyed by commit plus the root, and only
+doing so once a quorum of Rekor attestations has verified the members; the result is a
+single globally verifiable, tamper-evident record anyone can audit before trusting the
+build.
 
 ## GitHub Actions Integration
 
-Nix Seed provides a [GitHub Action](https://docs.github.com/actions).
+Nix Seed provides a [GitHub Action](./action.yml).
 
 - Supports x86_64 and ARM64, Linux and Darwin targets.
 - Setting `github_token` triggers load, tag, and push in one publish step.
 - Omit it to build only. Add extra tags via `tags`.
-- Use `registry` to push somewhere other than ghcr.io.
-- Use `tag_latest: true` only when publishing the manifest after all systems
-  finish.
+- Use `registry` to push somewhere other than ghcr.io (default: ghcr.io); the action
+  logs into that registry automatically using the provided token.
+- Use `tag_latest: true` only when publishing the manifest after all systems finish.
 - `seed_attr` defaults to `.#seed`.
-- Seeds default to `substitutes = false`; set `substitutes = true` in
-  `mkseed.nix` if you want to allow binary cache use inside the seed.
 
-Publishing to GHCR keeps images close to GitHub-hosted runners, reducing pull
-time and cold-start overhead for cache hits.
+Publishing to GHCR keeps images close to GitHub-hosted runners, reducing pull time and
+cold-start overhead for cache hits.
 
-### Example: Build and Publish Seed
+### Examples
+
+#### Build and Publish Seed
+
+Workflow file `.github/workflows/build-seed.yaml`:
 
 ```yaml
----
-name: build-seed
-"on": [push]
+name: Build Seed
+on:
+  push:
+    paths: &paths
+      - flake.lock
+      - flake.nix
+      - .github/workflows/build-seed.yaml
+  pull_request:
+    paths: *paths
 jobs:
-  seed:
+  build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Build seed
+        uses: 0compute/nix-seed
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          seed_attr: .#seed
-          registry: ghcr.io
-          tags: latest
+          tag_latest: true
 ```
 
-### Example: Build Project with Seed
+### Build Project with Seed
+
+Workflow file: `.github/workflows/build.yaml`.
 
 ```yaml
 ---
-name: build-project
-"on": [push]
+name: Build
+on:
+  push:
+    # MUST: match paths in build-seed.yaml
+    paths-ignore: &paths-ignore
+      - flake.lock
+      - flake.nix
+      - .github/workflows/build-seed.yaml
+  pull_request:
+    paths-ignore: *paths-ignore
+  workflow_run:
+    workflows:
+      - Build Seed
+    types:
+      - completed
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/your-org/nix-seed:latest
+    container: ghcr.io/${{ github.repository }}:latest
     steps:
-      - uses: actions/checkout@v4
-      - run: nix build .#app
+      - uses: actions/checkout@v6
+      - run: nix build
 ```
 
-### Comparison with Nix Community / GH Actions Caches
+## Compliance
 
-- **Hermetic build:** Nix Seed is ✅ fully isolated; standard caches ⚠ may fetch
-  missing paths.
-- **Reproducible:** Nix Seed ✅ pins inputs/tools; standard caches ⚠ vary by host
-  and toolchain.
-- **Incremental rebuilds:** Nix Seed ✅ only rebuilds changed layers; standard
-  caches ⚠ rebuild more surface.
-- **Layer reuse:** Nix Seed ✅ reuses base, toolchain, libs, apps, checks,
-  devShells, overlays; standard caches ❌ are flat.
-- **Cache keys:** Nix Seed ✅ uses flake input hash per layer; standard caches ⚠
-  are ad hoc or per-derivation.
-- **Network deps:** Nix Seed ❌ can run offline; standard caches ⚠ rely on remote
-  caches and untar overhead.
-- **Developer speed:** Nix Seed ✅ is near-instant when cached; standard caches ⚠
-  are slower and more network-bound.
-
-**Summary:** Nix Seed turns the pinned dependency graph into reusable OCI
-layers, not single store paths. That yields faster builds without the setup tax
-of repeatedly populating Nix caches in typical GitHub Actions flows.
-
-![XKCD Compiling](https://imgs.xkcd.com/comics/compiling.png "Not any more, fuckers. Get back to work.")
+Nix Seed is legally unimpeachable. Upstream license terms for non-redistributable SDKs
+are fully respected, leaving zero surface area for litigation.

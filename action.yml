@@ -10,7 +10,6 @@ inputs:
     description: Extra tags (space-separated)
   tag_latest:
     description: Apply the latest tag (use only when tagging the manifest)
-    default: "false"
   registry:
     description: Container registry (default ghcr.io)
     default: ghcr.io
@@ -37,30 +36,11 @@ runs:
 
     - name: Build seed
       shell: bash
-      run: |
-        set -euo pipefail
-        nix build "${{ inputs.seed_attr }}"
-
+      run: nix build "${{ inputs.seed_attr }}"
     - name: GHCR Publish
       if: ${{ inputs.github_token != '' }}
       env:
-        GITHUB_TOKEN: ${{ inputs.github_token }}
+        DOCKER_USER: ${{ github.actor }}
+        DOCKER_TOKEN: ${{ inputs.github_token }}
       shell: bash
-      run: |
-        set -euo pipefail
-        image_ref=$(docker load < result | sed -n 's/^Loaded image: //p')
-        name=${{ inputs.registry }}/${{ github.repository }}
-        docker tag "$image_ref" "$name:${{ github.sha }}"
-        tags="$(git describe --tags --always) ${{ inputs.tags }}"
-        if [ "${{ inputs.tag_latest }}" = "true" ]; then
-          tags="$tags latest"
-        fi
-        for tag in $tags; do
-          [ -z "$tag" ] && continue
-          docker tag "$image_ref" "$name:$tag"
-        done
-        echo "$GITHUB_TOKEN" \
-          | docker login ghcr.io \
-              --username ${{ github.actor }} \
-              --password-stdin
-        docker push --all-tags "$name"
+      run: bin/publish-seed ${{ inputs.registry }}/${{ github.repository }} ${{ github.sha }}

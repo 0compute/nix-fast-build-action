@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<EOF
+Usage:
+  publish-seed IMAGE_NAME COMMIT_SHA
+Options:
+  --latest             tag the loaded image as IMAGE_NAME:latest as well
+  --registry REGISTRY  registry to log into and use for pushing (default: ghcr.io)
+  --result RESULT      path to an existing docker load input (default: ./result)
+Args:
+  IMAGE_NAME  repository to push (e.g., ghcr.io/org/nix-seed)
+  COMMIT_SHA  git commit SHA for verification
+EOF
+}
+
+PARSED=$(getopt --options '' --long latest,registry:,result: -- "$@") || {
+  usage
+  exit 1
+}
+eval set -- "$PARSED"
+
+REGISTRY="ghcr.io"
+RESULT=./result
+while true; do
+  case "$1" in
+  --latest)
+    LATEST=1
+    shift
+    ;;
+  --registry)
+    REGISTRY=$2
+    shift 2
+    ;;
+  --result)
+    RESULT=$2
+    shift 2
+    ;;
+  --)
+    shift
+    break
+    ;;
+  *)
+    usage
+    exit 1
+    ;;
+  esac
+done
+
+if [[ $# -ne 2 ]]; then
+  usage
+  exit 1
+fi
+
+[[ -e $RESULT ]] || {
+  echo >&2 "result path '$RESULT' does not exist"
+  exit 1
+}
+
+[[ -n ${DOCKER_USER:-} && -n ${DOCKER_TOKEN:-} ]] || {
+  echo >&2 "DOCKER_USER and DOCKER_TOKEN must be set"
+  exit 1
+}
+
+name=$1
+sha=$2
+
+image=$(docker load --input "$RESULT" | awk 'NR==1 {print $NF}')
+[[ $image =~ :$sha$ ]] || {
+  echo >&2 "sha mismatch 'image' != '$sha'"
+  exit 1
+}
+
+docker login --username "$DOCKER_USER" --password-stdin "$REGISTRY" <<<"$DOCKER_TOKEN"
+
+tags=(
+  "$sha"
+  "$(git describe --tags --always)"
+)
+[[ -z ${LATEST:-} ]] || tags+=(latest)
+
+for tag in "${tags[@]}"; do
+  nametag="${name}:${tag}"
+  docker tag "$image" "$nametag"
+  docker push "$nametag"
+done
