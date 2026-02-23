@@ -124,7 +124,7 @@ done
 
 image_ref="${name}:${commit}"
 digest=$(docker inspect --format='{{index .RepoDigests 0}}' "$image_ref" 2>/dev/null || true)
-if [[ -z "${digest:-}" ]]; then
+if [[ -z ${digest:-} ]]; then
   echo >&2 "failed to resolve digest for $image_ref"
   exit 1
 fi
@@ -155,8 +155,8 @@ cat <<EOF >"$predicate"
   "commit": "$commit",
   "system": "$(nix eval --raw ".#seed.system")",
   "narHash": "$(
-    nix path-info --json --json-format 1 "$result" | jq --raw-output '.[].narHash'
-  )",
+  nix path-info --json --json-format 1 "$result" | jq --raw-output '.[].narHash'
+)",
   "layerHashes": $(
   tar --extract --file "$result" --to-stdout manifest.json |
     jq --raw-output '.[0].Layers | map(split("/")[0]) | @json'
@@ -184,7 +184,7 @@ cosign attest \
   --predicate "$predicate" \
   "$image_ref"
 
-cosign upload-blob \
+cosign upload blob \
   --rekor-url "$rekorUrl" \
   --artifact "$predicate" \
   "$image_ref"
