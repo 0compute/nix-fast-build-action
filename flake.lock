@@ -6,12 +6,9 @@
         "flake-utils": [
           "flake-utils"
         ],
-        "nix-zero-setup": "nix-zero-setup",
+        "git-hooks": "git-hooks",
         "nixpkgs": [
           "nixpkgs"
-        ],
-        "pyproject-nix": [
-          "pyproject-nix"
         ],
         "systems": [
           "systems"
@@ -19,14 +16,17 @@
         "treefmt": "treefmt"
       },
       "locked": {
-        "lastModified": 1771770469,
-        "narHash": "sha256-jM5lk3GJCvP37d5PGwKtW92dg0baGspCHAm1Foft/aE=",
-        "path": "/home/arthur/wrk/artdev/artstd",
-        "type": "path"
+        "lastModified": 1771307150,
+        "narHash": "sha256-sK+iC5cQwWtv5EAsWt0P1s6nvr+o8OjFUxFKS11BhXg=",
+        "owner": "0compute",
+        "repo": "artstd",
+        "rev": "cdef65883e0acc6713fc4cd3cfddf3e66334bb24",
+        "type": "github"
       },
       "original": {
-        "path": "/home/arthur/wrk/artdev/artstd",
-        "type": "path"
+        "owner": "0compute",
+        "repo": "artstd",
+        "type": "github"
       }
     },
     "blueprint": {
@@ -90,6 +90,54 @@
         "type": "github"
       }
     },
+    "git-hooks": {
+      "inputs": {
+        "flake-compat": [
+          "artstd",
+          "flake-compat"
+        ],
+        "gitignore": "gitignore",
+        "nixpkgs": [
+          "artstd",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1770726378,
+        "narHash": "sha256-kck+vIbGOaM/dHea7aTBxdFYpeUl/jHOy5W3eyRvVx8=",
+        "owner": "cachix",
+        "repo": "git-hooks.nix",
+        "rev": "5eaaedde414f6eb1aea8b8525c466dc37bba95ae",
+        "type": "github"
+      },
+      "original": {
+        "owner": "cachix",
+        "repo": "git-hooks.nix",
+        "type": "github"
+      }
+    },
+    "gitignore": {
+      "inputs": {
+        "nixpkgs": [
+          "artstd",
+          "git-hooks",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1709087332,
+        "narHash": "sha256-HG2cCnktfHsKV0s4XW83gU3F57gaTljL9KNSuG6bnQs=",
+        "owner": "hercules-ci",
+        "repo": "gitignore.nix",
+        "rev": "637db329424fd7e46cf4185293b9cc8c88c95394",
+        "type": "github"
+      },
+      "original": {
+        "owner": "hercules-ci",
+        "repo": "gitignore.nix",
+        "type": "github"
+      }
+    },
     "nix-filter": {
       "locked": {
         "lastModified": 1731533336,
@@ -102,32 +150,6 @@
       "original": {
         "owner": "numtide",
         "repo": "nix-filter",
-        "type": "github"
-      }
-    },
-    "nix-zero-setup": {
-      "inputs": {
-        "flake-utils": [
-          "artstd",
-          "flake-utils"
-        ],
-        "nixpkgs": [
-          "artstd",
-          "nixpkgs"
-        ],
-        "pyproject-nix": "pyproject-nix"
-      },
-      "locked": {
-        "lastModified": 1771614080,
-        "narHash": "sha256-XBfoBHM+hND1q1p+VvIrWftafhqyJRO+Laz6juViemw=",
-        "owner": "0compute",
-        "repo": "nix-zero-setup",
-        "rev": "81a2c5021d3c5ce19b8d765ce7e978418dbfb92e",
-        "type": "github"
-      },
-      "original": {
-        "owner": "0compute",
-        "repo": "nix-zero-setup",
         "type": "github"
       }
     },
@@ -148,28 +170,6 @@
       }
     },
     "pyproject-nix": {
-      "inputs": {
-        "nixpkgs": [
-          "artstd",
-          "nix-zero-setup",
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1771518446,
-        "narHash": "sha256-nFJSfD89vWTu92KyuJWDoTQJuoDuddkJV3TlOl1cOic=",
-        "owner": "nix-community",
-        "repo": "pyproject.nix",
-        "rev": "eb204c6b3335698dec6c7fc1da0ebc3c6df05937",
-        "type": "github"
-      },
-      "original": {
-        "owner": "nix-community",
-        "repo": "pyproject.nix",
-        "type": "github"
-      }
-    },
-    "pyproject-nix_2": {
       "inputs": {
         "nixpkgs": [
           "nixpkgs"
@@ -194,7 +194,7 @@
         "artstd": "artstd",
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs",
-        "pyproject-nix": "pyproject-nix_2",
+        "pyproject-nix": "pyproject-nix",
         "systems": "systems"
       }
     },

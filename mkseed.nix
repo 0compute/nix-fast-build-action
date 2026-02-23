@@ -6,17 +6,19 @@
   # name from flake default package or first inputsFrom
   name ? (
     let
-      base = "seed";
+      default = "unnamed";
     in
-    if self != null then
-      self.packages.${pkgs.stdenv.hostPlatform.system}.default.pname
-    else if inputsFrom != [ ] then
-      "${
-        (pkgs.lib.head inputsFrom).pname or (pkgs.lib.head inputsFrom).name
-          or "unnamed"
-      }-${base}"
-    else
-      base
+    "${
+      if self != null then
+        self.packages.${pkgs.stdenv.hostPlatform.system}.default.pname
+      else if inputsFrom != [ ] then
+        let
+          firstInput = pkgs.lib.head inputsFrom;
+        in
+        firstInput.pname or firstInput.name or default
+      else
+        default
+    }-seed"
   ),
   nix ? pkgs.nixVersions.latest,
   nixConf ? ''
