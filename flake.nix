@@ -61,6 +61,7 @@
                 gzip
                 jq
                 cosign
+                podman
               ];
               text = builtins.readFile ./bin/publish;
             }
@@ -139,6 +140,17 @@
           );
 
         };
+
+      seed = {
+        builders = {
+          # TODO: CI configs
+          # github
+          # gitlab
+          # another
+        };
+        quorum = 3;
+      };
+
     };
 
 }

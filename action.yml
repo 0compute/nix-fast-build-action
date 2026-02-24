@@ -48,13 +48,13 @@ runs:
       shell: bash
       run: nix build "${{ inputs.seed_attr }}"
 
-    - name: GHCR Publish
+    - name: Publish
       if: ${{ inputs.registry_token != '' }}
       env:
-        DOCKER_USER: ${{ github.actor }}
-        DOCKER_TOKEN: ${{ inputs.registry_token }}
+        REGISTRY_USER: ${{ github.actor }}
+        REGISTRY_PASS: ${{ inputs.registry_token }}
         # enable keyless signing so sign-in uses existing runner credentials rather than device flow
-        COSIGN_EXPERIMENTAL: "1"
+        COSIGN_EXPERIMENTAL: '1'
       shell: bash
       run: |-
         set -euo pipefail

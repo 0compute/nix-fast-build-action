@@ -1,37 +1,29 @@
 # Nix Seed
 
-Nix Seed provides fast-start build and run containers with n-of-m quorum build
-validation.
+Nix Seed provides
+[fully-transparent](https://github.com/NixOS/nixpkgs/blob/master/pkgs/os-specific/linux/minimal-bootstrap/stage0-posix/hex0.nix),
+multi-system, offline, OCI build containers .
 
 ## Purity Ain't Free
 
-Nix purity guarantees come with a tax in non-native ephemeral environments. Since there
-is no local store every derivation must be fetched, materialized, and verified before it
-can be trusted. Missing inputs force CI runs to substitute from binary caches or rebuild
-from source, which delays the job by burning network/CPU. 
+Nix is not well suited to non-native ephemeral environments. CI runners must install
+Nix, realize the closure, substitute from binary caches or build from source.
+
+- Binary caches are on the public internet
 
 For GitHub CI, [Cache Nix Action](https://github.com/nix-community/cache-nix-action) and
 [Nix Magic Cache](https://github.com/DeterminateSystems/magic-nix-cache-action) reduce
 the need to reach outside of GitHub's backbone, but are still largely network and CPU
 bound.
 
-## Trusting Trust
-
-> The code was clean, the build hermetic, but the compiler was pwned.
-
-Even with hermetic and deterministic builds, attacks like Ken Thompson's
-[Trusting Trust](https://dl.acm.org/doi/10.1145/358198.358210) remain a concern. A
-rigged build environment that undetectably injects code during compilation is always a
-possibility.
-
 ## Containers
 
-Layered OCI build containers with the flake inputs closure baked in.
-Unchanged layers are reused across builds, which yields extreme cacheability without
-relaxing hermeticity. A commit that changes app code without modifying inputs, which
-will be most of them, starts its CI build near instantly because all of the other layers
-are already cached. Publishing to GHCR keeps images close to GitHub-hosted runners,
-reducing pull time and cold-start overhead.
+Layered OCI build containers with the flake inputs closure baked in. Unchanged layers
+are reused across builds, which yields extreme cacheability without relaxing
+hermeticity. A commit that changes app code without modifying inputs, which will be most
+of them, starts its CI build near instantly because all of the other layers are already
+cached. Publishing to GHCR keeps images close to GitHub-hosted runners, reducing pull
+time and cold-start overhead.
 
 ### Seed
 
@@ -51,13 +43,20 @@ reducing pull time and cold-start overhead.
 - **app**: app
 - **container**: container glue (entrypoint, env configuration).
 
-## Trust No Fucker
+## Trusting Trust
 
-This is Endgame for supply chain security: each build is attested step explicitly
-surfaces its inputs and attestations for downstream to verify.
+> The code was clean, the build hermetic, but the compiler was pwned.
 
-1. Nixpkgs full-source bootstrap with a
-   [human-auditable stage0 hex seed](https://github.com/NixOS/nixpkgs/blob/master/pkgs/os-specific/linux/minimal-bootstrap/stage0-posix/hex0.nix).
+Even with hermetic and deterministic builds, attacks like Ken Thompson's
+[Trusting Trust](https://dl.acm.org/doi/10.1145/358198.358210) remain a concern. A
+rigged build environment that undetectably injects code during compilation is always a
+possibility.
+
+### Trust No Fucker
+
+xxx by cryto sig
+
+with n-of-m quorum build validation.
 
 Each container records:
 
@@ -70,15 +69,17 @@ Each container records:
 
 See [publish](./bin/publish) for full details.
 
-The builder signs these facts and embeds the signatures as OCI attestation artifacts.
-Downstream operators can fetch the attestation with the image metadata to confirm each
-input while keeping the provenance layer tied to the cached layers.
+TODO: The builder signs these facts and embeds the signatures as OCI attestation
+artifacts. Downstream operators can fetch the attestation with the image metadata to
+confirm each input while keeping the provenance layer tied to the cached layers.
 
 Signed statements are also mirrored into [Rekor](https://rekor.dev/) so there is a
 public, append-only log of every builder identity plus what it signed. Rekor validates
 each attestation, issues a verifiable timestamp, and lets auditors fetch the proof chain
 without pulling every image layer — this provides an extra layer of transparency and
 tamper-evidence for the provenance facts.
+
+immutable, tamper-resistant ledger The CI runner's signed attestation is pushed to Rekor
 
 ### 3. Transparency
 
@@ -109,72 +110,10 @@ Nix Seed provides a [GitHub Action](./action.yml).
 Publishing to GHCR keeps images close to GitHub-hosted runners, reducing pull time and
 cold-start overhead for cache hits.
 
-### Examples
+## License Compliance
 
-#### Build and Publish Seed
-
-Workflow file `.github/workflows/build-seed.yaml`:
-
-```yaml
-name: Build Seed
-on:
-  push:
-    paths: &paths
-      - flake.lock
-      - flake.nix
-      - .github/workflows/build-seed.yaml
-  pull_request:
-    paths: *paths
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-      - name: Build seed
-        uses: 0compute/nix-seed
-        with:
-          registry_token: ${{ secrets.GITHUB_TOKEN }}
-          tags: latest
-```
-
-### Build Project with Seed
-
-Workflow file: `.github/workflows/build.yaml`.
-
-```yaml
----
-name: Build
-on:
-  push:
-    # MUST: match paths in build-seed.yaml
-    paths-ignore: &paths-ignore
-      - flake.lock
-      - flake.nix
-      - .github/workflows/build-seed.yaml
-  pull_request:
-    paths-ignore: *paths-ignore
-  workflow_run:
-    workflows:
-      - Build Seed
-    types:
-      - completed
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    container: ghcr.io/${{ github.repository }}:latest
-    steps:
-      - uses: actions/checkout@v6
-      - run: nix build
-```
-
-## Compliance
-
-Nix Seed is legally unimpeachable. Upstream license terms for non-redistributable SDKs
-are fully respected, leaving zero surface area for litigation.
+Nix Seed is unimpeachable. Upstream license terms for non-redistributable SDKs are fully
+respected, leaving zero surface area for litigation.
 
 ______________________________________________________________________
 

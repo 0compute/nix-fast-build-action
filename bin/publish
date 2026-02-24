@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
+
+# {{{ defaults
 
 # work out if we're on a CI runner
 CI=
@@ -7,12 +10,14 @@ if [[ -n ${GITHUB_SHA:-} ]]; then
   CI=1
 fi
 
-tags=()
+predicateType=https://github.com/0compute/nix-seed
 registry=ghcr.io
 result=./result
-predicateType=https://github.com/0compute/nix-seed
-builderIdentity=
 rekorUrl=https://rekor.sigstore.dev
+
+# }}}
+
+# {{{ getopt
 
 usage() {
   cat <<EOF
@@ -45,6 +50,8 @@ PARSED=$(
 }
 eval set -- "$PARSED"
 
+builderIdentity=
+tags=()
 while true; do
   case "$1" in
   --tag)
@@ -87,28 +94,37 @@ if [[ $# -ne 2 ]]; then
   exit 1
 fi
 
+name=$1
+commit=$2
+image="$name:$commit"
+
+# }}}
+
+# {{{ sanity check
+
 [[ -e $result ]] || {
   echo >&2 "result path '$result' does not exist"
   exit 1
 }
-[[ -n ${DOCKER_USER:-} && -n ${DOCKER_TOKEN:-} ]] || {
-  echo >&2 "DOCKER_USER and DOCKER_TOKEN must be set"
+[[ -n ${REGISTRY_USER:-} && -n ${REGISTRY_PASS:-} ]] || {
+  echo >&2 "REGISTRY_USER and REGISTRY_PASS must be set"
   exit 1
 }
 
-name=$1
-commit=$2
+# }}}
 
-image=$(docker load --input "$result" | awk 'NR==1 {print $NF}')
-[[ $image =~ :$commit$ ]] || {
-  echo >&2 "commit mismatch 'image' != '$commit'"
+# {{{ load/tag/push
+
+result=$(podman load --input "$result" | awk 'NR==1 {print $NF}')
+[[ $result =~ :$commit$ ]] || {
+  echo >&2 "commit mismatch $result != $commit"
   exit 1
 }
 
-docker login \
-  --username "$DOCKER_USER" \
+podman login \
+  --username "$REGISTRY_USER" \
   --password-stdin "$registry" \
-  <<<"$DOCKER_TOKEN"
+  <<<"$REGISTRY_PASS"
 
 # tag and push, for CI do the push in one go
 tags+=(
@@ -117,20 +133,21 @@ tags+=(
 )
 for tag in "${tags[@]}"; do
   nametag="$name:$tag"
-  docker tag "$image" "$nametag"
-  [[ -n $CI ]] || docker push "$nametag"
+  podman tag "$result" "$nametag"
+  [[ -n $CI ]] || podman push "$nametag"
 done
-[[ -z $CI ]] || docker push --all-tags "$name"
+[[ -z $CI ]] || podman push --all-tags "$name"
 
-image_ref="${name}:${commit}"
-digest=$(docker inspect --format='{{index .RepoDigests 0}}' "$image_ref" 2>/dev/null || true)
-if [[ -z ${digest:-} ]]; then
-  echo >&2 "failed to resolve digest for $image_ref"
-  exit 1
-fi
-image_ref="$digest"
+# }}}
 
-if [[ -z ${builderIdentity} ]]; then
+# {{{ attest
+
+predicate="./$commit.$system.json"
+
+system=$(nix eval --raw ".#seed.system")
+
+# identity, if not supplied tries a few env vars then falls back to user@host
+if [[ -z $builderIdentity ]]; then
   for candidate in BUILDER_IDENTITY GITHUB_ACTOR; do
     value=${!candidate:-}
     if [[ -n $value ]]; then
@@ -143,17 +160,15 @@ if [[ -z ${builderIdentity} ]]; then
   builderIdentity=$(whoami)@$(hostname --fqdn)
 fi
 
-predicate="./${commit}.json"
-
 cat <<EOF >"$predicate"
 {
   "schemaVersion": 1,
   "predicateType": "$predicateType",
   "timestamp": "$(date --utc +'%Y-%m-%dT%H:%M:%SZ')",
-  "image": "$image_ref",
+  "image": "$(podman inspect --format='{{index .RepoDigests 0}}' "$image")",
   "registry": "$registry",
   "commit": "$commit",
-  "system": "$(nix eval --raw ".#seed.system")",
+  "system": "$system",
   "narHash": "$(
   nix path-info --json --json-format 1 "$result" | jq --raw-output '.[].narHash'
 )",
@@ -182,9 +197,8 @@ cosign attest \
   --rekor-url "$rekorUrl" \
   --type "$predicateType" \
   --predicate "$predicate" \
-  "$image_ref"
+  "$image"
 
-cosign upload blob \
-  --rekor-url "$rekorUrl" \
-  --artifact "$predicate" \
-  "$image_ref"
+cosign upload blob --files=$predicate "$image"
+
+# }}}
