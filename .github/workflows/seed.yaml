@@ -23,7 +23,7 @@ jobs:
       - name: Build seed
         uses: ./.
         with:
-          registry_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           # TODO: tag should be done by after check
           tags: latest
 

@@ -13,7 +13,7 @@ inputs:
   registry:
     description: Container registry (default ghcr.io)
     default: ghcr.io
-  registry_token:
+  github_token:
     description: Hub Token for registry login
   tags:
     description: Extra tags (space-separated)
@@ -49,10 +49,10 @@ runs:
       run: nix build "${{ inputs.seed_attr }}"
 
     - name: Publish
-      if: ${{ inputs.registry_token != '' }}
+      if: ${{ inputs.github_token != '' }}
       env:
         REGISTRY_USER: ${{ github.actor }}
-        REGISTRY_PASS: ${{ inputs.registry_token }}
+        REGISTRY_PASS: ${{ inputs.github_token }}
         # enable keyless signing so sign-in uses existing runner credentials rather than device flow
         COSIGN_EXPERIMENTAL: '1'
       shell: bash
