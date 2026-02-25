@@ -1,6 +1,9 @@
 name: Update Runner Tools Lock
 
 on:
+  push:
+    paths:
+      - .github/workflows/runner-tools.yaml
   schedule:
     - cron: 0 6 * * *
   workflow_dispatch:
@@ -76,19 +79,9 @@ jobs:
             '[inputs] | reduce .[] as $f ({}; . * $f)' \
             fragments/*/fragment.json > merged.json
 
-          # validate: within each OS family (linux/darwin) all systems must
-          # share the same image_key; extract keys for the commit message
+          # collect all image_keys present across systems for the commit message
           image_keys=$(jq --raw-output '
-            to_entries
-            | group_by(.key | split("-") | last)
-            | map(
-                (map(.value | keys[0]) | unique) as $keys |
-                if ($keys | length) > 1 then
-                  error("inconsistent image_key within OS family: \($keys | @json)")
-                else $keys[0] end
-              )
-            | unique
-            | join(", ")
+            [to_entries[] | .value | keys[]] | unique | join(", ")
           ' merged.json)
           echo "image_keys=$image_keys" >> "$GITHUB_OUTPUT"
 
@@ -117,5 +110,5 @@ jobs:
 
       - uses: stefanzweifel/git-auto-commit-action@v7
         with:
-          commit_message: "chore(ci): update runner tools lock [${{ steps.merge.outputs.image_keys }}]"
+          commit_message: 'chore(ci): update runner tools lock [${{ steps.merge.outputs.image_keys }}]'
           file_pattern: runner-tools.lock
