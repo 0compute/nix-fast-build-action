@@ -1,11 +1,12 @@
-# Nix Seed
+# Nix Seed: Design
+
+The design goal is time-to-build (setup phase) performance.
+
+Content-addressing, reproducibility, and the auditable bootstrap chain are
+properties of `nixpkgs` and `nix2container` — not added by this system. The
+trust model is a free consequence of the performance model.
 
 ## Architecture
-
-The design target is time-to-build. Content-addressing, reproducibility, and the
-auditable bootstrap chain are properties of nixpkgs and `nix2container` — not
-added by this system. The trust model is a free consequence of the performance
-model.
 
 The release pointer is the image digest,
 `ghcr.io/org/repo.seed@sha256:<digest>`, or digest of other build result NAR.
@@ -14,15 +15,33 @@ Registry tags and metadata are non-authoritative.
 Layering is delegated to `nix2container`. Execution is handled by external
 workflow scripts.
 
-### Performance Model
-
-The system targets time-to-build (setup phase):
+### Performance
 
 - Closure realization is replaced by pulling and mounting an OCI filesystem
   image.
 - Setup cost scales with dependency change since the last seed.
 - Source fetch (shallow clone size) is unchanged.
 - Build execution time is unchanged.
+
+#### Constraints
+
+- Requires an OCI registry. A CI provider with a co-located registry is
+  preferred for performance, but not required.
+- Darwin builds must be run on macOS builders if they need Apple SDKs. A runner
+  with a differing SDK version produces a differing NAR hash and fails
+  deterministically.
+
+#### Instrumentation
+
+Jobs are instrumented with OpenTelemetry spans for:
+
+- seed pull
+- mount ready
+- build start
+- seed build (when a new seed is required before the app build)
+- digest verification
+
+Primary metric: time-to-ready (setup only).
 
 #### Comparisons
 
@@ -252,33 +271,6 @@ ceremony distinct from normal builds:
 
 Post-genesis builds use the standard N-of-M threshold. The genesis root is the
 immutable trust anchor.
-
-### Registry
-
-An OCI registry is required.
-
-A CI provider with a co-located registry is preferred for performance, but not
-required.
-
-### Instrumentation
-
-Jobs are instrumented with OpenTelemetry spans for:
-
-- seed pull
-- mount ready
-- build start
-- seed build (when a new seed is required before the app build)
-- digest verification
-
-Primary metric: time-to-ready (setup only).
-
-### Constraints
-
-- Requires an OCI registry.
-- Darwin builds must be run on macOS builders if they need Apple SDKs. A runner
-  with a differing SDK version produces a differing NAR hash and fails
-  deterministically.
-______________________________________________________________________
 
 ## .gov Proofing
 

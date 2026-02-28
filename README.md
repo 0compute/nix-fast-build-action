@@ -1,16 +1,14 @@
 # Nix Seed
 
-Nix Seed produces OCI seed images for Nix-built projects, packaging their
+Nix Seed provides OCI seed images for Nix-built projects, packaging their
 dependency closure as content-addressed OCI layers to eliminate per-job
 reconstruction of `/nix/store`.
 
-The design goal is CI setup time. Because the images are content-addressed
-outputs of reproducible Nix builds rooted at an auditable bootstrap chain,
-supply-chain trust properties come without additional work. See
-[DESIGN.md](DESIGN.md) for architecture, performance model, trust modes, and
-threat model.
+The design goal is time-to-build. Supply-chain trust properties are a free
+result. See [design](./DESIGN.md) for architecture, performance model, trust
+modes, and threat model.
 
-## Why
+## Why?
 
 In environments without a pre-populated `/nix/store`, the entire dependency
 closure must be realized before a build can begin. This setup tax often
