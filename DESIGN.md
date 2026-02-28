@@ -551,7 +551,7 @@ at the DOJ has the same legal access to your build infrastructure as any other.
 
 > [!WARNING]
 >
-> *Sovereign Cloud is a bullshit marketing term*: providers claiming
+> *"Sovereign Cloud" is a bullshit marketing term*: Providers claiming
 > jurisdictional isolation remain US-operated entities under US law. An AWS EU
 > Region is still Amazon. An Azure Government cloud is still Microsoft.
 > Jurisdiction follows the operator, not the data center. CI platforms
@@ -565,8 +565,7 @@ A quorum composed entirely of US-headquartered CI providers is legally a single
 failure domain. Practically, a meaningful quorum requires that at least one
 quorum builder be:
 
-- Self-hosted on hardware controlled by an organization incorporated outside the
-  US.
+- Hosted on hardware controlled by an organization incorporated outside of US.
 - Operated in a jurisdiction with no mutual legal assistance treaty (MLAT) with
   the US, or with significant friction in its execution (MLAT[^mlat]).
 
