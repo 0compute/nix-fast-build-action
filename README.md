@@ -1,6 +1,6 @@
 # Nix Seed
 
-Fast, trustable, Nix builds on non-native ephemeral CI.
+Fast, trustable, Nix builds on non-native ephemeral CI runners.
 
 > Woosh... Wondering what that even means? See [Glossary](./GLOSSARY.md).
 
