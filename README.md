@@ -9,8 +9,10 @@ Happy-path builds - application code change, dependencies unchanged - start in
 mount, build.
 
 > Flow state, unbroken: $$$
+>
 > Compute bill, slashed: $$$
-> A build you can trust: Priceless.
+>
+> A build you can trust: Priceless
 
 See [design](./DESIGN.md) for full detail.
 
