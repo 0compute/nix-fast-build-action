@@ -1,10 +1,10 @@
 # Nix Seed
 
-Nix on non-native ephemeral CI: happy-path (app source change only) **build
-starts in seconds**.
+Nix on ephemeral CI: happy-path (app source change only) - **build start is
+functionally instant**.
 
-Dependency closure ships as content-addressed OCI layers. Explicit trust anchors
-with 3 trust modes.
+Dependencies are shipped as seed [OCI] images with content-addressed layers.
+Explicit trust anchors are built-in.
 
 > Supply chain, secured: $$$
 >
@@ -12,10 +12,30 @@ with 3 trust modes.
 >
 > Flow state, uninterrupted: Priceless.
 
-Want detail?
+Details?
 
-- [Full breakdown with threat model](./DESIGN.md).
-- [Plain English for non-technical readers](./PLAIN-ENGLISH.md).
+- [Design](./DESIGN.md).
+- [Threat Actors](./THREAT-ACTORS.md).
+- [Plain English](./PLAIN-ENGLISH.md) (for non-technical readers).
+
+## Performance
+
+`actions/cache` pegs the runner by forcing it to transfer a monolithic tarball,
+then sequentially extract it. Post-job, the sequence must be completed in
+reverse.
+
+OCI layers stream and mount concurrently over the network.
+
+The difference is Night and Day.
+
+- Build setup: reduced from >60s (typical `actions/cache` fetch) to \<10s.
+- Source fetch time: unchanged.
+- Build execution time: unchanged.
+
+CI provider fixed startup latency (provision and boot VM) is ~5s.
+
+Another 5s to pull/mount the OCI layers? Eminently practical with a local
+registry (Hello, GHCR!).
 
 ## Trust
 
@@ -23,8 +43,8 @@ Want detail?
 >
 > - Anonymous, c. 1967
 
-Nix Seed has three trust modes. Choose one, based on your risk tolerance and
-budget.
+Nix Seed has three trust modes. Choose one based on your budget / risk
+tolerance.
 
 ### Trust Level: Innocent
 
@@ -80,7 +100,7 @@ N-of-M independent builder quorum.
   [hardware interdiction](./DESIGN.md#hardware-interdiction).
 - Resiliency: High.
 - Cost (assuming 3 builders across 4 systems): 0.001 to 0.003 ETH ($3 to $9 at
-  ETH = $3,000).
+  ETH = $,000).
 
 > [!NOTE]
 >
@@ -271,3 +291,7 @@ environment.
 ```sh
 nix run github:0compute/nix-seed/v1#sync
 ```
+
+______________________________________________________________________
+
+[oci]: https://opencontainers.org/
