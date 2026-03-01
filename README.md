@@ -5,10 +5,10 @@ Fast, trustable, Nix builds on non-native ephemeral CI runners.
 > Woosh... Wondering what that even means? See [Glossary](./GLOSSARY.md).
 
 Happy-path builds - application code change, dependencies unchanged - start
-*building* near-instantly. The dependency closure ships pre-built as an OCI
-image; pull, mount, build.
+*building* near-instantly.
 
-CI providers with co-located registries, like GitHub and GHCR, mean the pull is
+The dependency closure ships pre-built as an OCI image; pull, mount, build. CI
+providers with co-located registries, like GitHub with GHCR, mean the pull is
 fast. The extreme cacheability of Nix-built OCI layers means the pull may not be
 necessary at all.
 
