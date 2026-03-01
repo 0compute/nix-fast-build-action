@@ -2,7 +2,7 @@
 
 Nix on ephemeral CI: happy-path (app src change only) **build starts in seconds**.
 
-The dependency closure ships as content-addressed OCI layers. Signed provenance
+Dependency closure ships as content-addressed OCI layers; signed provenance
 and SBOM included.
 
 > Dependencies realized, again: $$$.
