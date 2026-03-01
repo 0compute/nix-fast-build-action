@@ -21,7 +21,7 @@ Details?
 
 ## Performance
 
-`actions/cache` pegs the runner by forcing it to transfer a monolithic tarball,
+`actions/cache` pegs the runner by forcing it to transfer a monolithic tarball
 then sequentially extract it. Post-job, the sequence must be completed in
 reverse.
 
