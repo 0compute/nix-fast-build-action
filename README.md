@@ -99,8 +99,8 @@ N-of-M independent builder quorum.
 - Attack Surface: Misconfiguration, governance keys,
   [hardware interdiction](./DESIGN.md#hardware-interdiction).
 - Resiliency: High.
-- Cost (assuming 3 builders across 4 systems): 0.001 to 0.003 ETH ($3 to $9 at
-  ETH = $,000).
+- Cost (assuming 3 builders across 4 systems): 0.001-0.003 ETH ($3-$9 @
+  ETH=$3k).
 
 > [!NOTE]
 >
