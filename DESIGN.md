@@ -75,13 +75,7 @@ external to the container.
 - Source fetch (shallow clone size) is unchanged.
 - Build execution time is unchanged.
 
-#### Constraints
-
-- Requires an OCI registry. A CI provider with a co-located registry is
-  preferred for performance, but not required.
-- Darwin builds must be run on macOS builders if they require Apple SDKs. A
-  runner with a differing SDK version produces a differing NAR digest and fails
-  deterministically.
+TODO: link actual job runs from the examples.
 
 #### Instrumentation
 
@@ -104,6 +98,14 @@ benchmarking / evaluation.
 The benchmark command is:
 
 - `nix develop --command true`
+
+#### Constraints
+
+- Requires an OCI registry. A CI provider with a co-located registry is
+  preferred for performance, but not required.
+- Darwin builds must be run on macOS builders if they require Apple SDKs. A
+  runner with a differing SDK version produces a differing NAR digest and fails
+  deterministically.
 
 ### Seed Construction
 
@@ -544,7 +546,7 @@ ETH = $3,000), excluding unusual fee spikes.
 - If a builder is revoked post-genesis, re-evaluate affected releases and
   republish status.
 
-#### Implicit Trust Boundary
+### Implicit Trust Boundary
 
 While the design mitigates many attack vectors, it relies on two fundamental
 trust assumptions:
@@ -561,6 +563,30 @@ trust assumptions:
    requested digest. We trust the math of content-addressing, not the service
    providing the bytes.
 
+The [xz-utils backdoor (2024)](https://tukaani.org/xz-backdoor/) demonstrated
+that highly resourced, patient adversaries will execute multi-year social
+engineering campaigns to compromise a single maintainer's trust.
+
+**Nix Seed does not audit human intent; it guarantees cryptographic
+provenance.** If an adversary successfully compromises a maintainer and merges a
+backdoor into `flake.lock`, Nix Seed will faithfully build it, and the L2
+contract will anchor it.
+
+However, Nix Seed fundamentally alters the adversary's risk profile:
+
+1. **No Silent CI Injections:** The attacker cannot silently compromise a build
+   runner to inject a payload into the artifact. They *must* commit the backdoor
+   to the public Git repository to pass the N-of-M quorum digest check.
+2. **Forced Attribution:** By forcing the attack into the source tree, the
+   adversary's actions become a publicly auditable Git crime. The malicious
+   artifact is permanently, cryptographically bound to the specific commit and
+   the identities of the independent builders who attested to it.
+
+HUMINT[^humint] recruitment of build-system maintainers is not addressed by any
+technical control. Key ceremony discipline and HSM[^hsm]-resident keys limit
+insider blast radius: an insider can attest a bad build, but cannot
+retroactively forge the quorum.
+
 ### Project Attack Surface
 
 This project is intentionally low-code: it mainly defines build policy,
@@ -571,15 +597,13 @@ runtime logic to exploit.
 The primary risk is **misconfiguration**, not complex code execution. The
 highest-impact failure modes are:
 
-- accepting mutable references (tags) instead of digests,
-- weak quorum/independence configuration,
-- enabling substituters[^substituter] in L2[^l2] mode,
-- trusting unsigned or under-specified attestations[^attestation],
-- insecure key handling in CI.
+- weak quorum/independence configuration
+- enabling substituters[^substituter] in L2[^l2] mode
+- trusting unsigned or under-specified attestations[^attestation]
+- insecure key handling in CI
 
 Security work should prioritize strict defaults, immutable references,
-verification-by-default, and auditable configuration over adding new
-orchestration code.
+verification-by-default, and auditable configuration.
 
 ## Threat Actors
 
@@ -728,34 +752,6 @@ passive interception regardless of TLS[^tls]. Reproducible builds mean an
 observer who intercepts a build gets the same artifact but cannot inject code
 without breaking the digest.
 
-## Controls
-
-The [xz-utils backdoor (2024)](https://tukaani.org/xz-backdoor/) demonstrated
-that highly resourced, patient adversaries will execute multi-year social
-engineering campaigns to compromise a single maintainer's trust.
-
-**Nix Seed does not audit human intent; it guarantees cryptographic
-provenance.** If an adversary successfully compromises a maintainer and merges a
-backdoor into `flake.lock`, Nix Seed will faithfully build it, and the L2
-contract will anchor it.
-
-However, Nix Seed fundamentally alters the adversary's risk profile:
-
-1. **No Silent CI Injections:** The attacker cannot silently compromise a build
-   runner to inject a payload into the artifact. They *must* commit the backdoor
-   to the public Git repository to pass the N-of-M quorum digest check.
-2. **Forced Attribution:** By forcing the attack into the source tree, the
-   adversary's actions become a publicly auditable Git crime. The malicious
-   artifact is permanently, cryptographically bound to the specific commit and
-   the identities of the independent builders who attested to it.
-
-HUMINT[^humint] recruitment of build-system maintainers is not addressed by any
-technical control. Key ceremony discipline and HSM[^hsm]-resident keys limit
-insider blast radius: an insider can attest a bad build, but cannot
-retroactively forge the quorum.
-
-______________________________________________________________________
-
 ## Compliance
 
 Upstream license terms for non-redistributable SDKs are fully respected.
@@ -853,9 +849,7 @@ ______________________________________________________________________
 
 [^humint]: **[HUMINT](https://en.wikipedia.org/wiki/Human_intelligence_(intelligence_gathering)):**
     Human Intelligence. Intelligence gathered through interpersonal contact:
-    recruitment, social engineering, or insider threats. Technical controls do
-    not address HUMINT; key ceremony discipline and HSM[^hsm]-resident keys
-    limit insider blast radius.
+    recruitment, social engineering, or insider threats. 
 
 [^icann]: **[ICANN](https://www.icann.org/):** Internet Corporation for Assigned
     Names and Numbers. US-incorporated nonprofit that administers the global
