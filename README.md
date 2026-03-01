@@ -124,7 +124,7 @@ Add `nix-seed` to your flake and expose `seed` and `seedCfg`:
           };
         }
       );
-    seedCfg.trust = "naive";
+    seedCfg.trust = "innocent";
   };
 }
 ```
