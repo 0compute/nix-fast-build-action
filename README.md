@@ -293,3 +293,5 @@ nix run github:0compute/nix-seed/v1#sync
 ```
 
 ______________________________________________________________________
+
+[oci]: https://opencontainers.org/
