@@ -12,7 +12,7 @@ with 3 trust modes.
 >
 > Flow state, uninterrupted: Priceless.
 
-Want more?
+Want detail?
 
 - [Full breakdown with threat model](./DESIGN.md).
 - [Lost in the jargon?](./PLAIN-ENGLISH.md).
