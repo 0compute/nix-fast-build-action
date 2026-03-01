@@ -1,34 +1,25 @@
 # Nix Seed
 
-Nix Seed drastically speeds up builds for Nix-based projects on non-native
-ephemeral CI runners. Instead of downloading/compiling the project's dependencies
-on every run, it packages them into a reusable container.
+Fast, trustable Nix builds on non-native ephemeral CI.
 
-*Under the hood:* It creates OCI seed images with the dependency closure
-packaged as content-addressed layers, eliminating the need to reconstruct the
-`/nix/store` on ephemeral runners.
+> Woosh... Wondering what that even means? See [Glossary](./GLOSSARY.md).
 
-Build provenance is cryptographically attested: quorum proves that what is in
-git is what was built.
+Happy-path builds - application code change, dependencies unchanged - start in
+<10 seconds. The dependency closure ships pre-built as an OCI image; pull,
+mount, build.
 
-For full implementation detail, see [design](./DESIGN.md).
+> Flow state, unbroken: $$$
+> Compute bill, slashed: $$$
+> A build you can trust: Priceless.
+
+See [design](./DESIGN.md) for full detail.
 
 ## Why?
 
-In environments without a pre-populated `/nix/store` (i.e. standard GitHub
-Actions runners), every dependency, and the dependency's dependencies, must be
-downloaded or built before the actual build can begin. This setup tax often
-dominates total job time.
+Standard CI runners rebuild every Nix dependency from scratch. For a typical
+project: 60-90 seconds of setup per job.
 
-Build time does not change. Setup time does. Source must always be fetched
-(typically via shallow clone).
-
-Traditional CI setup scales with total dependency size. Seeded CI setup scales
-with dependency change since the last seed.
-
-When only application code changes, the previous seed is reused and
-time-to-build is near-instant. When a dependency changes, or when no seed exists
-yet, the seed is built before application build.
+Build time does not change. Setup time does.
 
 ## Quickstart
 
@@ -109,30 +100,29 @@ jobs:
 
 ## Production Setup
 
-*This section is a stub.* Production mode anchors releases on Ethereum L2 using
-an N-of-M builder quorum. See [Design: Production](./DESIGN.md#production-todo)
-for the full trust model.
+Production mode anchors releases on Ethereum L2 using an N-of-M builder quorum.
+No single builder, organisation, or jurisdiction can unilaterally forge a
+release. See [Design: Production](./DESIGN.md#production-todo) for the full
+trust model.
+
+> [!WARNING]
+>
+> The [design doc](./DESIGN.md) contains critical security information.
+>
+> Read it. Twice. Or, get pwned.
 
 **Setup sequence:**
 
-1. **Configure builders** — define your builder set in `modules/builders.nix`
-   with distinct `corporateParent`, `jurisdiction`, and signing keys. N ≥ 3,
+1. **Configure builders** - define your builder set in `modules/builders.nix`
+   with distinct `corporateParent`, `jurisdiction`, and signing keys. N >= 3,
    each on independent infrastructure and CI provider.
-2. **Execute genesis** — all M builders independently build the seed from source
+2. **Execute genesis** - all M builders independently build the seed from source
    with substituters disabled, submit unanimous attestations, and co-sign the
    genesis transaction. See [Design: Genesis](./DESIGN.md#genesis).
-3. **Key management** — store builder signing keys in HSMs, not CI environment
+3. **Key management** - store builder signing keys in HSMs, not CI environment
    variables. Configure governance multi-sig for key rotation and revocation.
-4. **Verify independence** — no two quorum builders may share a corporate parent,
+4. **Verify independence** - no two quorum builders may share a corporate parent,
    CI provider, or OIDC issuer.
 
-See [Design: Threat Actors](./DESIGN.md#threat-actors) for jurisdiction guidance
-on selecting independent builder operators.
-
-## Troubleshooting
-
-*This section is a stub.* Future content will cover:
-
-- How to shell into a seed container to debug environment issues.
-- Distinguishing between Nix evaluation errors and seed orchestration failures.
-- Checking L2 quorum status and diagnosing missing attestations.
+See [Design: Threat Actors](./DESIGN.md#threat-actors) for guidance on selecting
+independent builder operators.

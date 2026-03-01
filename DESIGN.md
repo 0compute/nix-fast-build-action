@@ -1,15 +1,19 @@
 # Nix Seed: Design
 
-Goal: Near-zero setup time for happy-path builds (application code change only)
-on non-Nix-native CI[^ci] runners[^runner].
+> New to these terms? See [Glossary](./GLOSSARY.md).
 
-The implementation leverages OCI[^oci] seed images, to package a project's
-dependency closure[^closure] as content-addressed OCI layers, eliminating per-job
-reconstruction of `/nix/store`.
+Happy-path builds - application code change only, no dependency update - start
+in under 10 seconds on any ephemeral runner[^runner]. The dependency
+closure[^closure] is already packaged; pull, mount, build. No `/nix/store`
+reconstruction.
 
-Verifiable integrity is an inherent property of the system, enforced by the
-cryptographic linkage between source code, its dependency closure, and the
-resulting build artifacts.
+The setup tax of cold closure reconstruction is a one-time cost per seed, shared
+across all subsequent jobs. Dependency changes trigger a seed rebuild;
+everything else is free.
+
+Every build is cryptographically bound to its source: what is in git is exactly
+what was built. This is enforced by the linkage between source commit, dependency
+closure, and output artifact - not assumed.
 
 ## Architecture
 
@@ -23,10 +27,9 @@ The release pointer is the OCI image digest
 (`ghcr.io/org/repo.seed@sha256:<digest>`). Registry[^registry] tags and metadata
 are non-authoritative.
 
-Layering is delegated to
-[nix2container](https://github.com/nlewo/nix2container), which provides an
-efficient container build workflow. Execution is handled by workflow scripts
-external to the container.
+Layering is handled by
+[nix2container](https://github.com/nlewo/nix2container); execution by workflow
+scripts external to the container.
 
 > [!WARNING]
 >
@@ -38,9 +41,9 @@ external to the container.
 
 ### Performance
 
-- Closure realization is replaced by pulling and mounting an OCI filesystem
-  image, dropping CI setup time from ~90 seconds (standard Nix cache fetch) to
-  <10 seconds.
+- Closure realization is replaced by pulling and mounting an OCI[^oci]
+  filesystem image, dropping CI[^ci] setup time from ~90 seconds (standard Nix
+  cache fetch) to <10 seconds.
 - Setup cost scales with dependency change since the last seed.
 - Source fetch (shallow clone size) is unchanged.
 - Build execution time is unchanged.
@@ -61,9 +64,9 @@ Primary metric: time-to-build (setup time).
 
 #### Comparisons
 
-This project can generate CI workflows that compare setup-time overhead against
-cache-based approaches (e.g. public binary cache, actions/cache based) for
-benchmarking / evaluation.
+Nix Seed generates CI workflows that benchmark setup-time against cache-based
+approaches (public binary cache, `actions/cache`) so the improvement is
+measurable, not assumed.
 
 The benchmark command is:
 
@@ -89,9 +92,8 @@ The benchmark command is:
 the Nix build system under the same supply chain trust model as all other
 dependencies.
 
-Nix Seed itself is equally a pinned flake input; its digest is verified by the
-same mechanism, binding build orchestration code to a specific auditable
-revision.
+Nix Seed itself is a pinned flake input: the build orchestrator is subject to
+the same supply-chain trust model as everything it builds.
 
 Seed builds are executed offline by passing `--network none` to the container
 runtime.
@@ -102,11 +104,10 @@ is handled by Nix evaluation/build itself, and mismatches fail by design.
 
 ### Non-Container Results
 
-Nix Seed works for any Nix build, not only those producing OCI images. When the
-project build produces a NAR[^nar] (binary, library, development shell, or other
-derivation output), the seed container still ships all dependencies as OCI
-layers; the project build runs inside it and produces its output to the local
-Nix store.
+The seed model applies to any Nix derivation - binaries, libraries, development
+shells, not just container images. When the project build produces a
+NAR[^nar], the seed container ships all dependencies as OCI layers; the project
+build runs inside it and writes its output to the local Nix store.
 
 In this case the release pointer is the NAR content-addressed digest of the
 build output rather than an OCI image digest. The trust and attestation model is
@@ -174,8 +175,8 @@ correspondence between what is pulled and what was built.
 > Verify with `nix build --check`. See
 > [reproducible-builds.org](https://reproducible-builds.org/).
 
-Releases may require N-of-M[^n-of-m] builder[^builder] agreement on the
-image digest.
+Releases require N-of-M[^n-of-m] builder[^builder] agreement on the image
+digest. No single build is trusted alone.
 
 Quorum is only meaningful if builders span independent failure domains:
 organization, jurisdiction, infrastructure, and identity issuer.
@@ -195,13 +196,14 @@ forge a majority. Unanimous (M-of-M) is the strongest guarantee. See
 [`modules/seedcfg.nix`](modules/seedcfg.nix) and
 [`modules/builders.nix`](modules/builders.nix) for the builder registry schema.
 
-**Timing:** in development mode with N-of-M and a deadline, a party controlling M-N
-builders can delay attestation to ensure the deciding N-th vote comes from a
+**Timing:** in development mode with N-of-M and a deadline, a party controlling
+M-N builders can delay attestation to ensure the deciding N-th vote comes from a
 builder of their choice. Production mode eliminates this: attestations
 accumulate indefinitely and quorum is declared when the threshold is met, not
 when a timer expires.
 
-If builders disagree on the digest, release fails.
+Disagreement among builders is not a bug - it is the protocol. Release is
+blocked until quorum agrees on the same digest.
 
 #### Modes
 
@@ -306,6 +308,8 @@ The on-chain record is intentionally minimal to limit calldata[^calldata] cost.
 Each builder additionally produces an in-toto[^in-toto] statement binding full
 provenance:
 
+<!-- AGENT: predicate uses SLSA provenance schema -->
+
 - source repository URI
 - source commit digest (full 40-hex SHA-1 or 64-hex SHA-256)
 - `flake.lock` content digest
@@ -395,16 +399,16 @@ No deadline is required. The contract accumulates attestations indefinitely;
 quorum is declared when the threshold is met. The blockchain is the transparency
 log - no separate log service is required.
 
-The master builder's role is reduced to monitoring the contract for the
-published root. Master-builder trust is removed from the promotion path.
+**Master-builder trust is eliminated from the promotion path.** The contract
+promotes a release when quorum is met - no coordinator, no single point of
+authority.
 
 **Key management:** builder keys are persistent secrets held in CI secret
 stores. In Production mode, signing keys SHOULD be non-exportable and backed by
 HSM/KMS-HSM class infrastructure if costs permit. Raw private keys stored
 directly in CI secret stores are NOT RECOMMENDED for Production mode. Compromise
 triggers revocation via the contract's governance multi-sig[^multi-sig] (see [Governance
-Constraints](#governance-constraints)). Keys are registered at genesis and rotated
-by contract multi-sig.
+Constraints](#governance-constraints)).
 
 **Why CI key compromise still matters:** the contract verifies that `N` distinct
 registered builder keys signed the same tuple. It does not distinguish an
@@ -492,7 +496,7 @@ builders across 4 systems (`aarch64-darwin`, `aarch64-linux`, `x86_64-darwin`,
   - expected gas: 120,000 to 220,000
   - expected cost: 0.00006 to 0.00022 ETH
   - expected USD (ETH = $3,000): $0.18 to $0.66
-- total attestations (3 builders × 4 systems = 12 submissions):
+- total attestations (3 builders x 4 systems = 12 submissions):
   - expected gas: 1,440,000 to 2,640,000
   - expected cost: 0.00072 to 0.00264 ETH
   - expected USD (ETH = $3,000): $2.16 to $7.92
@@ -535,14 +539,8 @@ trust assumptions:
 
 The [xz-utils backdoor (2024)](https://tukaani.org/xz-backdoor/) demonstrated
 that highly resourced, patient adversaries will execute multi-year social
-engineering campaigns to compromise a single maintainer's trust.
-
-**Nix Seed does not audit human intent; it guarantees cryptographic
-provenance.** If an adversary successfully compromises a maintainer and merges a
-backdoor into `flake.lock`, Nix Seed will faithfully build it, and the L2
-contract will anchor it.
-
-However, Nix Seed fundamentally alters the adversary's risk profile:
+engineering campaigns to compromise a single maintainer's trust. However, Nix
+Seed fundamentally alters the adversary's risk profile:
 
 1. **No Silent CI Injections:** The attacker cannot silently compromise a build
    runner to inject a payload into the artifact. They *must* commit the backdoor
@@ -704,8 +702,9 @@ independent.
 
 PLA Unit 61398 and MSS-linked groups (APT10, APT41) have demonstrated sustained
 supply-chain targeting, including software-update hijacking and build-server
-compromise. The Production mode design raises the cost by requiring simultaneous
-across N independent builder networks.
+compromise. Production mode raises the cost: simultaneous compromise of N
+independent builder networks, across independent jurisdictions, is required to
+forge a quorum.
 
 ### Russia
 
@@ -724,252 +723,7 @@ without breaking the digest.
 
 ## Compliance
 
-Upstream license terms for non-redistributable SDKs are fully respected.
+Apple SDK license terms prohibit redistribution. Seed images for Darwin targets
+contain only open-source store paths; Apple SDK components are not included and
+must be present on the builder host.
 
-______________________________________________________________________
-
-## Footnotes
-
-[^anchor]: **Anchor:** Writing a release fingerprint (digest or Merkle
-    root[^merkle-root]) to an immutable ledger so it cannot be silently changed
-    later.
-
-[^ant-catalog]: **[ANT catalog](https://en.wikipedia.org/wiki/ANT_catalog):**
-    NSA's classified menu of hardware and software implants for targeted
-    surveillance, leaked by Snowden in 2013. Documents implants for network
-    equipment, hard drives, and server firmware.
-
-[^attestation]: **[Attestation](https://slsa.dev/attestation-model):** A
-    verifiable record that a specific build occurred from specified inputs by a
-    known builder. See also: in-toto[^in-toto], Rekor[^rekor], OIDC[^oidc],
-    Registry[^registry].
-
-[^bgp]: **[BGP](https://www.rfc-editor.org/rfc/rfc4271):** Border Gateway
-    Protocol (RFC 4271). The routing protocol that directs traffic between
-    autonomous systems on the internet. BGP hijacking redirects traffic through
-    an adversary-controlled network path.
-
-[^builder]: **Builder:** A machine or CI runner that performs a build and
-    submits evidence (attestations).
-
-[^calldata]:
-    **[calldata](https://ethereum.org/en/developers/docs/transactions/):** The
-    input data payload of an Ethereum transaction. See also: Gas[^gas].
-
-[^cdn]: **[CDN](https://en.wikipedia.org/wiki/Content_delivery_network):**
-    Content Delivery Network. A geographically distributed network of proxy
-    servers that cache and serve content to end users from nearby nodes. Major
-    CDN operators (Cloudflare, Fastly, Akamai) are US-incorporated or subject
-    to US jurisdiction.
-
-[^ci]: **[CI](https://en.wikipedia.org/wiki/Continuous_integration):**
-    Continuous Integration. The practice of automating the integration of code
-    changes from multiple contributors into a single software project.
-
-[^closure]: **[Closure](https://nix.dev/manual/nix/stable/glossary#gloss-closure):**
-    The full transitive set of store paths required by a Nix derivation,
-    including all runtime dependencies and their dependencies recursively.
-    Packaging the closure as OCI layers is the core mechanism of Nix Seed.
-
-[^cloud-act]: **[CLOUD Act](https://www.justice.gov/dag/cloudact):** Clarifying
-    Lawful Overseas Use of Data Act (2018). Requires US-operated providers to
-    produce data stored abroad when served with a US warrant, regardless of
-    physical location.
-
-[^cosign]: **[cosign](https://docs.sigstore.dev/cosign/overview/):** Sigstore
-    tool for signing, verifying, and storing signatures and attestations in OCI
-    registries.
-
-[^cots]: **[COTS](https://en.wikipedia.org/wiki/Commercial_off-the-shelf):**
-    Commercial Off-The-Shelf hardware or software purchased through normal
-    commercial channels. Relevant here because most server hardware passes
-    through US logistics channels regardless of operator jurisdiction, making
-    it a target for supply-chain interdiction.
-
-[^dns]: **[DNS](https://www.rfc-editor.org/rfc/rfc1034):** Domain Name System
-    (RFC 1034). The global hierarchical naming system that translates
-    human-readable domain names to IP addresses.
-
-[^dual-ec-drbg]: **[Dual_EC_DRBG](https://en.wikipedia.org/wiki/Dual_EC_DRBG):**
-    Dual Elliptic Curve Deterministic Random Bit Generator. A NIST-standardized
-    PRNG (SP 800-90A) subsequently confirmed to contain an NSA-planted backdoor.
-
-[^ed25519]: **[Ed25519](https://ed25519.cr.yp.to/):** Edwards-curve Digital
-    Signature Algorithm over Curve25519. Not NIST-standardized. Preferred over
-    P-256[^p-256].
-
-[^fisa-section-702]: **[FISA Section
-    702](https://www.dni.gov/index.php/704-702-overview):** Foreign Intelligence
-    Surveillance Act Section 702. Authorizes warrantless collection of
-    communications of non-US persons from US-based providers.
-
-[^five-eyes]: **[Five Eyes](https://en.wikipedia.org/wiki/Five_Eyes):** UKUSA
-    signals intelligence alliance: United States (NSA), United Kingdom (GCHQ),
-    Canada (CSE), Australia (ASD), New Zealand (GCSB). Intelligence collected by
-    any member is shared across all.
-
-[^gas]: **[Gas](https://ethereum.org/en/developers/docs/gas/):** The unit used
-    to measure computational work on EVM-compatible chains. Transaction fee =
-    gas used * gas price. Used on Ethereum L2[^l2].
-
-[^hsm]: **[HSM](https://en.wikipedia.org/wiki/Hardware_security_module):**
-    Hardware Security Module. Tamper-resistant hardware device for cryptographic
-    key storage and operations. Private keys cannot be exported; signing occurs
-    inside the device.
-
-[^humint]: **[HUMINT](https://en.wikipedia.org/wiki/Human_intelligence_(intelligence_gathering)):**
-    Human Intelligence. Intelligence gathered through interpersonal contact:
-    recruitment, social engineering, or insider threats. Technical controls do
-    not address HUMINT; key ceremony discipline and HSM[^hsm]-resident keys
-    limit insider blast radius.
-
-[^icann]: **[ICANN](https://www.icann.org/):** Internet Corporation for Assigned
-    Names and Numbers. US-incorporated nonprofit that administers the global
-    DNS[^dns] root zone, IP address allocation, and protocol parameter
-    registries. Structural US control over the DNS[^dns] root is independent
-    of any specific administration.
-
-[^in-toto]: **[in-toto](https://in-toto.io/):** Framework for securing software
-    supply chains by defining and verifying each step in a build pipeline via
-    signed link metadata.
-
-[^kms]: **KMS:** Key Management Service. A managed system used to store
-    cryptographic keys and perform signing operations without exposing private
-    key material to build scripts. See [NIST SP
-    800-57](https://csrc.nist.gov/pubs/sp/800/57/pt1/r5/final) for key
-    management recommendations.
-
-[^l2]: **[L2](https://ethereum.org/en/layer-2/):** Ethereum Layer 2. A network
-    that records transactions and ultimately settles them to Ethereum (L1). In
-    this design, it is used as an immutable public ledger for release
-    anchors[^anchor].
-
-[^merkle-root]: **[Merkle root](https://en.wikipedia.org/wiki/Merkle_tree):** A
-    single digest that summarizes a tree of digests and allows efficient inclusion
-    proofs for each leaf.
-
-[^mlat]:
-    **[MLAT](https://en.wikipedia.org/wiki/Mutual_legal_assistance_treaty):**
-    Mutual Legal Assistance Treaty. Bilateral or multilateral agreement for
-    cross-border legal cooperation, including evidence requests. Processing time
-    varies from months to years.
-
-[^multi-sig]: **[Multi-sig](https://en.wikipedia.org/wiki/Threshold_cryptosystem):**
-    Multi-signature scheme requiring M-of-N keyholders to co-sign an
-    operation. Used here for governance (builder key rotation and revocation)
-    to prevent unilateral control. See also: N-of-M[^n-of-m].
-
-[^n-of-m]: **N-of-M:** Out of `M` configured builders, at least `N` independent
-    builders must report the same result.
-
-[^nar]: **[NAR](https://nix.dev/manual/nix/stable/glossary):** Nix Archive.
-    Canonical binary serialization of a Nix store path, used as the input to
-    content-addressing. The NAR digest of a path must match its declaration;
-    mismatch fails the build.
-
-[^narinfo]: **[narinfo](https://nix.dev/manual/nix/stable/package-management/binary-cache-substituter):**
-    Metadata file in a Nix binary cache describing a store path: its
-    NAR[^nar] digest, references, deriver, and optional signature. Fetched by
-    a substituter[^substituter] before downloading the NAR archive.
-
-[^national-intelligence-law]: **[National Intelligence Law
-    (2017)](https://www.chinalawtranslate.com/en/national-intelligence-law/):**
-    Chinese law compelling any Chinese entity to cooperate with intelligence
-    services on demand and without public disclosure.
-
-[^nsl]: **[NSL](https://www.eff.org/issues/national-security-letters):**
-    National Security Letter. Administrative subpoena issued without judicial
-    review. Carries a statutory gag order: the recipient cannot disclose that
-    the letter was received.
-
-[^oauth]: **[OAuth 2.0](https://www.rfc-editor.org/rfc/rfc6749):** Open
-    Authorization framework (RFC 6749) for delegated authorization without
-    exposing credentials. The basis for OIDC[^oidc] identity assertions used
-    in keyless signing.
-
-[^oci]: **[OCI](https://opencontainers.org/):** Open Container Initiative.
-    Industry standards for container image format, distribution, and runtime.
-
-[^oidc]: **[OIDC](https://openid.net/connect/):** OpenID Connect. Identity layer
-    on OAuth 2.0[^oauth]. Used here for keyless signing: a CI platform issues a
-    short-lived OIDC token asserting the workflow identity, which
-    cosign[^cosign] uses as the signing credential.
-
-[^opentelemetry]: **[OpenTelemetry](https://opentelemetry.io/):** Vendor-neutral
-    observability framework for collecting traces, metrics, and logs. Used here
-    to instrument CI job phases (seed pull, mount, build) with structured spans
-    for timing analysis.
-
-[^p-256]: **[P-256](https://csrc.nist.gov/pubs/fips/186/5/final):** NIST P-256
-    elliptic curve (secp256r1), defined in FIPS 186-5. Used in ECDSA.
-    NIST-standardized and widely deployed; treat as potentially weakened given
-    the Dual_EC_DRBG[^dual-ec-drbg] precedent.
-
-[^prism]: **[PRISM](https://en.wikipedia.org/wiki/PRISM):** NSA program for
-    collection of stored internet communications directly from major US tech
-    companies under FISA Section 702[^fisa-section-702] authority.
-
-[^quantum-insert]: **[QUANTUM
-    INSERT](https://en.wikipedia.org/wiki/QUANTUM_INSERT):** NSA/GCHQ technique
-    for injecting malicious content into HTTP streams via a man-on-the-side
-    attack. The attacker races the legitimate server response with a crafted
-    packet.
-
-[^registry]: **[Registry](https://github.com/opencontainers/distribution-spec):**
-    An OCI[^oci]-compliant service for storing and distributing container
-    images and artifacts. Addressed by content digest (immutable) or by tag
-    (mutable). In this design, registry tags are non-authoritative; the image
-    digest is the release pointer. See also: OCI[^oci].
-
-[^rekor]: **[Rekor](https://github.com/sigstore/rekor):** Sigstore[^sigstore]'s
-    immutable, append-only transparency log for software supply chain
-    attestations. Entries are publicly verifiable; the log is operated by the
-    Sigstore project.
-
-[^runner]: **Ephemeral virtual machine:** Executes CI job steps. Runners start
-    fresh on every job with no persistent state.
-
-[^sigstore]: **[sigstore](https://sigstore.dev/):** Open-source project
-    providing infrastructure for signing, transparency, and verification of
-    software artifacts. Comprises cosign, Rekor, and Fulcio.
-
-[^sla]: **[SLA](https://en.wikipedia.org/wiki/Service-level_agreement):** Service
-    Level Agreement. A contractual commitment on availability, reliability, and
-    support response time. Rekor (Sigstore[^sigstore]'s transparency log)
-    carries no enterprise SLA; an outage blocks attestation in Dev mode.
-
-[^sorm]: **[SORM](https://en.wikipedia.org/wiki/SORM):** Sistema
-    Operativno-Rozysknikh Meropriyatiy (System for Operative Investigative
-    Activities). Russian federal law requiring telecommunications operators to
-    install equipment providing FSB with real-time access to all communications
-    traffic, without a warrant.
-
-[^substituter]: **[Substituter](https://nix.dev/manual/nix/stable/command-ref/conf-file#conf-substituters):**
-    A Nix binary cache endpoint. When enabled, Nix fetches pre-built store paths
-    from the substituter instead of building locally from source. See also:
-    NAR[^nar].
-
-[^sunburst]:
-    **[SUNBURST](https://en.wikipedia.org/wiki/2020_United_States_federal_government_data_breach):**
-    The SolarWinds supply chain attack (2020). GRU/SVR operators compromised the
-    SolarWinds Orion build system and inserted a backdoor signed with the
-    legitimate code-signing key, affecting thousands of organizations including
-    US federal agencies.
-
-[^tao]: **[TAO](https://en.wikipedia.org/wiki/Tailored_Access_Operations):**
-    Tailored Access Operations. NSA division responsible for active exploitation
-    of foreign targets, including hardware implants and network-level attacks.
-
-[^tls]: **[TLS](https://www.rfc-editor.org/rfc/rfc8446):** Transport Layer
-    Security (RFC 8446). Cryptographic protocol that
-    encrypts network traffic between two parties. Protects against passive
-    eavesdropping but not against a provider compelled to cooperate or a
-    network-level man-on-the-side attacker (see QUANTUM
-    INSERT[^quantum-insert]).
-
-[^trusting-trust]: **[Ken Thomson's seminal
-    attack](https://dl.acm.org/doi/10.1145/358198.358210):** A compiler can be
-    modified to insert a backdoor into programs it compiles, including a
-    modified copy of itself into compilers it compiles, making the backdoor
-    invisible in source. Defeated by bootstrapping the compiler chain from a
-    human-auditable binary seed rather than an opaque binary.
