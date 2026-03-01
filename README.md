@@ -5,9 +5,9 @@ Nix on ephemeral CI: happy-path (app src change only) **build starts in seconds*
 Dependency closure ships as content-addressed OCI layers; signed provenance
 and SBOM included.
 
-> Dependencies realized, again: $$$.
+> Dependencies realized, once: $$$.
 >
-> Flow state, interrupted: $$$.
+> Flow state, uninterrupted: $$$.
 >
 > A build guaranteed by Hard Math: Priceless.
 
