@@ -246,6 +246,17 @@ in
 
   options.flake.seedCfg = {
 
+    trust = mkOption {
+      default = "innocent";
+      type = types.enum [
+        "innocent"
+        "credulous"
+        "suspicious"
+        "zero"
+      ];
+      description = "Trust tier to enforce in build and verification flows.";
+    };
+
     fallbackRegistry = mkOption {
       default = "ghcr.io";
       type = types.str;

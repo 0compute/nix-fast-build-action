@@ -53,7 +53,7 @@ Observed characteristics:
 >
 > - Anonymous, c. 1967
 
-Nix Seed provides three trust modes. Choose one.
+Nix Seed provides four trust modes. Choose one.
 
 ### Trust Level: Innocent
 
@@ -90,7 +90,29 @@ signed git tag (format configurable) on the source commit.
 - Resiliency: As for [Innocent](#trust-level-innocent).
 - Cost: Free.
 
-## Trust Level: Zero
+### Trust Level: Suspicious
+
+> Trust, but verify the verifier.
+
+[Suspicious](./DESIGN.md#suspicious) keeps [Credulous](#trust-level-credulous)
+builder quorum and adds independent Rekor log quorum (K-of-L).
+
+- Guarantee: No single builder or single Rekor operator can forge a release.
+- Attack Surface: Builder set, Master Builder, OIDC trust roots, and Rekor log
+  operators.
+- Resiliency: Higher Rekor availability than [Credulous](#trust-level-credulous)
+  with K-of-L logging; single-log outages or single-jurisdiction log capture are
+  not automatically fatal.
+- Cost: Low to moderate operational overhead for multi-log operation, checkpoint
+  consistency checks, and witness/monitoring.
+
+> [!NOTE]
+>
+> Suspicious still has a central Master Builder in the promotion flow. It
+> hardens transparency-log dependency and availability; it is not full
+> decentralization.
+
+### Trust Level: Zero
 
 > **“Ambition must be made to counteract ambition.”**
 >
@@ -118,20 +140,37 @@ Structure constrains power. Verification replaces trust.
   - **Immutable ledger**
   - **Contract-enforced builder independence**
   - **No central actor**
-- Attack Surface: Governance keys, misconfiguration, [hardware
-  interdiction](./DESIGN.md#hardware-interdiction).
+- Attack Surface: Governance keys, misconfiguration,
+  [hardware interdiction](./DESIGN.md#hardware-interdiction).
 - Resiliency: High.
 - Cost (3 builders, 4 systems): Ξ0.001–Ξ0.003 (~$3–$9 @ Ξ1=$3k).
 
 > [!WARNING]
+
+\<<\<<\<<< HEAD
+
+> Full-source bootstrap "Genesis Build" is expensive. The
+> [NixOS Full-Source Bootstrap thesis](https://nzbr.github.io/nixos-full-source-bootstrap/thesis.pdf)
+> reports ~17h30m on 12 logical cores / 16 GiB RAM, a baseline of ~200
+> vCPU-hours per genesis run. Estimate order-of-magnitude only; cost scales with
+> builders x systems (M x S) for each full bootstrap event. ======= Full-source
+> bootstrap "Epoch Build" is expensive. The full-source bootstrap thesis reports
+> three offline runs (17h03m, 17h21m, 17h43m) on 12 logical cores / 16 GiB RAM,
+> a useful baseline of ~200 vCPU-hours per genesis run
+> ([source thesis PDF](https://nzbr.github.io/nixos-full-source-bootstrap/thesis.pdf)).
+> Estimate order-of-magnitude only; cost scales with builders x systems (M x S)
+> for each full bootstrap event.
 >
-> Full-source bootstrap "Genesis Build" is expensive. The [NixOS Full-Source
-> Bootstrap
-> thesis](https://nzbr.github.io/nixos-full-source-bootstrap/thesis.pdf) reports
-> ~17h30m on 12 logical cores / 16 GiB RAM,
-> a baseline of ~200 vCPU-hours per genesis run. Estimate
-> order-of-magnitude only; cost scales with builders x systems (M x S) for each
-> full bootstrap event.
+> For rough cadence planning, run
+> [`scripts/toolchain_churn.py`](./scripts/toolchain_churn.py) against a local
+> nixpkgs clone to count toolchain-critical churn (events/week and median days
+> between events) without network access.
+
+> [!NOTE]
+>
+> Zero is not yet implemented.
+>
+> > > > > > > 47e4f78 (Add Suspicious trust tier and toolchain churn estimator)
 >
 > For rough cadence planning, run
 > [`scripts/toolchain_churn.py`](./scripts/toolchain_churn.py) against a local
@@ -184,8 +223,7 @@ Add `nix-seed` to your `flake.nix` then expose `seed` and `seedCfg`:
 > [!WARNING]
 >
 > Seed and project builds require `id-token: write` permission. Seed build, and
-> project build, if outputs include an OCI image, requires
-> `packages: write`.
+> project build, if outputs include an OCI image, requires `packages: write`.
 >
 > Untrusted pull requests with changes to `flake.lock` **MUST NOT** trigger
 > build of seed or project.

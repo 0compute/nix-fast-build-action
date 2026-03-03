@@ -245,6 +245,59 @@ At minimum, the statement must bind:
 > (e.g. `cache.nixos.org`) are trusting the cache operator rather than
 > independently building.
 
+### Suspicious
+
+> [!WARNING]
+>
+> Suspicious still depends on external [OIDC] trust roots and a Master Builder
+> to coordinate promotion.
+
+Suspicious keeps [Credulous](#credulous) builder quorum semantics and adds a
+Rekor logging quorum across multiple independent Rekor operators.
+
+- Guarantee: No single builder or single Rekor operator can forge a release.
+- Attack Surface: Builder set, Master Builder, OIDC issuer roots, and Rekor
+  log operators.
+- Resiliency: Better than [Credulous](#credulous) for Rekor outages and
+  jurisdiction capture, because verification only requires K-of-L Rekor logs.
+- Cost: Low to moderate operational overhead (running or contracting multiple
+  Rekor logs, checkpoints, and monitoring).
+
+Suspicious is primarily `.gov`-proofing and availability-hardening for the
+transparency-log dependency. It is not full decentralization: the Master
+Builder remains a central actor in promotion flow.
+
+#### Quorum
+
+Each attestation is submitted to L independent Rekor logs chosen using the same
+independence criteria as builders: organization, jurisdiction,
+infrastructure/provider, and signing/identity control.
+
+Recommended mode is K-of-L logging quorum rather than all-of-all:
+
+- **All-of-all (L-of-L):** strongest completeness, weakest availability. One
+  down log blocks progress.
+- **K-of-L:** better availability and partition tolerance. A minority of down
+  logs does not block build/verify.
+
+Consumers verify all of the following:
+
+1. Builder signature validity (same attestation requirements as
+   [Credulous](#credulous)).
+1. Rekor inclusion proofs from at least K of L configured logs.
+1. (Recommended) Rekor checkpoint progression and consistency proofs for each
+   consulted log.
+
+Checkpoint/consistency verification matters because transparency logs can
+equivocate (split-view) to different verifiers. Production Suspicious
+deployments SHOULD run external monitoring/witnessing that compares checkpoints
+across locations and time.
+
+Suspicious does not by itself remove OIDC trust-root coupling; like
+[Credulous](#credulous), default identity is OIDC-backed. A future extension
+could allow registered non-OIDC builder keys while still using Rekor quorum,
+but that is out of scope for this tier definition.
+
 ### Zero
 
 #### No Substitutions
