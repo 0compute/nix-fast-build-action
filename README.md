@@ -68,7 +68,7 @@ with a single builder.
 - Attack Surface: Builder, OIDC trust roots, Rekor, and Nix cache
   infrastructure.
 - Resiliency: Public-good Rekor publishes an availability SLO (not a contractual
-  SLA); downtime can block logging and verification when depended on.
+  SLA); downtime blocks build and verify.
 - Cost: Free.
 
 ### Trust Level: Credulous
