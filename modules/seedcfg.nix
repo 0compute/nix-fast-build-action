@@ -264,21 +264,33 @@ in
     };
 
     rekor = mkOption {
-      default = "https://rekor.sigstore.dev";
-      type = types.str;
-      description = "Default Rekor log URL used by Innocent/Credulous.";
-    };
-
-    rekorLogs = mkOption {
-      default = [ ];
-      type = types.listOf types.str;
-      description = "Rekor log URLs for Suspicious mode (L logs in K-of-L).";
-    };
-
-    rekorQuorum = mkOption {
-      default = null;
-      type = with types; nullOr int;
-      description = "Required Rekor inclusion proofs in Suspicious mode; null means all configured logs.";
+      default = { };
+      type = types.submodule {
+        options = {
+          logs = mkOption {
+            default = [ "https://rekor.sigstore.dev" ];
+            type = types.listOf types.str;
+            description = "Configured Rekor transparency log URLs.";
+          };
+          quorum = mkOption {
+            default = null;
+            type = with types; nullOr int;
+            description = "Required Rekor inclusion proofs; null resolves to the number of configured logs.";
+          };
+        };
+      };
+      apply = value:
+        let
+          logCount = builtins.length value.logs;
+          effectiveQuorum = if value.quorum == null then logCount else value.quorum;
+        in
+        if logCount == 0 then
+          throw "seedCfg.rekor.logs must contain at least one Rekor URL"
+        else if effectiveQuorum < 1 || effectiveQuorum > logCount then
+          throw "seedCfg.rekor.quorum must be between 1 and length(seedCfg.rekor.logs)"
+        else
+          value // { quorum = effectiveQuorum; };
+      description = "Rekor log configuration.";
     };
 
     builders = mkOption {
