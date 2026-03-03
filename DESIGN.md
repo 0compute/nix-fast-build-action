@@ -328,7 +328,7 @@ and 16 GiB RAM. A practical planning number is ~200 vCPU-hours per genesis run
 (order-of-magnitude, assuming all cores remain saturated for ~17.4h). Cost
 scales roughly with builders × systems: M independent builders across S target
 systems implies ~200 x M x S vCPU-hours for each full-bootstrap event. Source:
-[full-source bootstrap thesis](https://nzbr.github.io/nixos-full-source-bootstrap/thesis.pdf).
+[NixOS Full-Source Bootstrap thesis (PDF)](https://nzbr.github.io/nixos-full-source-bootstrap/thesis.pdf).
 
 Toolchain churn drives how often this wall is paid. Use
 [`scripts/toolchain_churn.py`](./scripts/toolchain_churn.py) against a local

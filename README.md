@@ -123,7 +123,7 @@ N-of-M independent builder quorum.
 > Full-source bootstrap "Epoch Build" is expensive. The full-source bootstrap
 > thesis reports three offline runs (17h03m, 17h21m, 17h43m) on 12 logical
 > cores / 16 GiB RAM, a useful baseline of ~200 vCPU-hours per genesis run
-> ([source thesis PDF](https://nzbr.github.io/nixos-full-source-bootstrap/thesis.pdf)).
+> ([NixOS Full-Source Bootstrap thesis, PDF](https://nzbr.github.io/nixos-full-source-bootstrap/thesis.pdf)).
 > Estimate order-of-magnitude only; cost scales with builders x systems (M x S)
 > for each full bootstrap event.
 >
