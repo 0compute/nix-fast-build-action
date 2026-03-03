@@ -1,41 +1,55 @@
 # Nix Seed
 
-Nix on ephemeral CI: source-only change **build setup \<10s**.
+Nix on ephemeral CI.
 
-Dependencies as content-addressed [OCI] layers.
+Source-only change: **build setup \<10s**.
+
+Dependencies via [OCI] layers.
 
 Explicit trust anchors.
 
-> Supply chain, secured: $$$
+> Supply chain, secured: **$$$**.
 >
-> Dependencies realized, once: $$$.
+> Dependencies realized, once: **$$$**.
 >
-> Flow state, uninterrupted: Priceless.
+> Flow state, uninterrupted: **Priceless**.
 
 Docs → [Design](./DESIGN.md) / [Threat Actors](./THREAT-ACTORS.md) /
 [Plain-English Overview](./PLAIN-ENGLISH.md).
 
-## Performance
+## OCI Layers vs `actions/cache`
 
-`actions/cache` burns the runner by forcing it to copy then sequentially extract
-a monolithic tarball. Post-job, the sequence must be completed in reverse.
+`actions/cache` operates by:
 
-OCI layers stream and mount in parallel.
+1. Downloading a monolithic archive.
+1. Writing it to disk.
+1. Extracting it sequentially.
+1. Re-archiving and uploading post-job.
 
-The difference is Night and Day.
+This means:
 
-- Build setup: >60s (typical `actions/cache` fetch) to \<10s.
-- Source fetch time: unchanged.
-- Build execution time: unchanged.
+- High network/disk I/O.
+- Serialization bottlenecks.
+- Full dataset copy on every job.
+- Poor scaling with cache size.
 
-CI provider fixed startup latency (provision and boot VM) is ~5s.
+OCI layers are content-addressed:
 
-Another 5s to pull/mount the OCI layers? Highly practical with a runner-local
-registry (Hello, GHCR!).
+- Layer pulls are parallelized.
+- Deduplication is automatic.
+- Filesystems mount layered content without full extraction.
+- Only changed layers are transferred.
+
+Observed characteristics:
+
+- **VM provisioning:** ~5s (fixed provider cost)
+- **Layer pull + mount:** \<5s (with runner-local registry i.e. GHCR)
+- **Source fetch:** unchanged
+- **Build execution:** unchanged
 
 ## Trust
 
-> Just because you're paranoid doesn't mean they aren't after you.
+> **“Just because you're paranoid doesn't mean they aren't after you.”**
 >
 > - Anonymous, c. 1967
 
@@ -43,9 +57,9 @@ Nix Seed provides three trust modes. Choose one.
 
 ### Trust Level: Innocent
 
-> IDGAF about trust. Gimme the Fast!
+> **“IDGAF about trust. Gimme the Fast!”**
 >
-> - Every Engineer Born of Woman.
+> - Every Engineer Every Born of Woman
 
 [Innocent](./DESIGN.md#innocent) anchors trust on the Rekor public-good instance
 with a single builder.
@@ -58,7 +72,7 @@ with a single builder.
 
 ### Trust Level: Credulous
 
-> I Want To Believe.
+> **“I Want To Believe.”**
 >
 > - Fox Mulder, The X-Files, 1993
 
@@ -76,31 +90,39 @@ signed git tag (format configurable) on the source commit.
 - Resiliency: As for [Innocent](#trust-level-innocent).
 - Cost: Free.
 
-### Trust Level: Zero
+## Trust Level: Zero
 
-> In God we trust. All others must bring data.
+> **“Ambition must be made to counteract ambition.”**
 >
-> - W. Edwards Deming, c. 1980
+> — James Madison, *Federalist No. 51*, 1788
 
-[Zero](./DESIGN.md#zero) anchors trust on an Ethereum L2 smart contract with an
-N-of-M independent builder quorum.
+[Zero](./DESIGN.md#zero) assumes that any actor may be compromised or coerced.
 
-- Guarantee: Hard Math. No builder, organisation, or jurisdiction can forge a
-  release. Backing:
+Release validity is defined by quorum, not by authority.
+
+Identical output must be attested across independent failure domains.
+
+Promotion occurs mechanically upon quorum verification. No central actor
+controls promotion.
+
+Forgery effort compounds with each additional independent failure domain.
+
+Structure constrains power. Verification replaces trust.
+
+- Guarantee: Hard Math. Trust is anchored on an Ethereum L2 smart contract with
+  an N-of-M independent builder quorum. Backing:
   - **Full-source bootstrap**
   - **Immutable ledger**
-  - **No central actor**
   - **Contract-enforced builder independence**
-- Attack Surface: Misconfiguration, governance keys,
-  [hardware interdiction](./DESIGN.md#hardware-interdiction).
+  - **No central actor**
+- Attack Surface: Misconfiguration, governance keys, [hardware
+  interdiction](./DESIGN.md#hardware-interdiction).
 - Resiliency: High.
-- Cost (assuming 3 builders across 4 systems): Ξ0.001-Ξ0.003 ($3-$9 @ Ξ1=$3k).
+- Cost (3 builders, 4 systems): Ξ0.001–Ξ0.003 (~$3–$9 @ Ξ1=$3k).
 
 > [!NOTE]
 >
-> Zero is not yet implemented.
->
-> Funding applications pending: NLnet, Sovereign Tech Fund.
+> Zero is not yet implemented. Funding applications pending.
 
 ## Quickstart/Evaluation
 
@@ -130,7 +152,6 @@ Add `nix-seed` to your `flake.nix` then expose `seed` and `seedCfg`:
         {
           # placeholder: replace
           default = pkgs.hello;
-          # seed is passed flake self; it realizes inputs for all flake outputs
           seed = inputs.nix-seed.lib.mkSeed {
             inherit pkgs;
             inherit (inputs) self;
@@ -149,7 +170,7 @@ Add `nix-seed` to your `flake.nix` then expose `seed` and `seedCfg`:
 > [!WARNING]
 >
 > Seed and project builds require `id-token: write` permission. Seed build, and
-> project build, if outputs include a container image, requires
+> project build, if outputs include an OCI image, requires
 > `packages: write`.
 >
 > Untrusted pull requests with changes to `flake.lock` **MUST NOT** trigger
