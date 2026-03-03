@@ -7,7 +7,7 @@ Source-only change: **build setup <10s**.
 
 Dependencies via OCI layers.
 
-Explicit, configurable trust anchors.
+Explicit, configurable trust postures.
 
 > Supply chain, secured: **$$$**.  
 >
@@ -15,7 +15,10 @@ Explicit, configurable trust anchors.
 >
 > Flow state, uninterrupted: **Priceless**.
 
-Docs → [Design](./DESIGN.md) / [Threat Actors](./THREAT-ACTORS.md) / [Plain-English Overview](./PLAIN-ENGLISH.md)
+## Documentation
+
+[Design](./DESIGN.md) (technical, condensed) 
+[Overview](./PLAIN-ENGLISH.md) (plain-English, for non-technical readers)
 
 ## OCI Layers vs `actions/cache`
 

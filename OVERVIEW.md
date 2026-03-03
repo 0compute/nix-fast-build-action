@@ -1,52 +1,52 @@
-# Nix Seed: Plain English
+# Nix Seed: Overview
 
 ## Executive Summary
 
 - Nix Seed makes CI start fast by reusing verified dependency layers.
 - It blocks tampering by requiring matching outputs from independent builders.
-- Three trust levels trade speed, cost, and independence.
+- Trust levels trade speed, cost, and independence.
 
 ## Foundational Technology: Nix
 
-*Nix* is the build tool and package manager at the heart of Nix Seed. It has
-one defining property: given the same inputs, it always produces identical
-outputs. It builds in isolation: no system access, no hidden dependencies, no
-implicit state.
+*Nix* is the build tool and package manager at the heart of Nix Seed. It has one
+defining property: given the same inputs, it always produces identical outputs.
+It builds in isolation: no system access, no hidden dependencies, no implicit
+state.
 
 This property is called *reproducibility*. It is the foundation for Nix Seed's
 security. If independent builders produce the same output, that agreement is
 strong evidence of integrity. When enough builders agree, the agreement becomes
 a guarantee.
 
-Every package Nix produces is stored under a path that includes a fingerprint
-of everything that went into building it: source code, compiler, dependencies,
-and build instructions. If any input changes, the fingerprint changes and a
-separate package is stored. Nothing is silently overwritten.
+Every package Nix produces is stored under a path that includes a fingerprint of
+everything that went into building it: source code, compiler, dependencies, and
+build instructions. If any input changes, the fingerprint changes and a separate
+package is stored. Nothing is silently overwritten.
 
 ## Velocity
 
 ### Problem: Every Build Starts from Zero
 
 Engineers store source code in *Git*, which records every change, who made it,
-and when. When an engineer *pushes* a change, an automated system runs a
-*build* on a remote server.
+and when. When an engineer *pushes* a change, an automated system runs a *build*
+on a remote server.
 
 The build compiles source code into *machine code* - the binary instructions a
-processor executes directly. ARM chips (common in Android and Apple devices)
-and x86 chips (common in Intel and AMD servers) speak different machine code
+processor executes directly. ARM chips (common in Android and Apple devices) and
+x86 chips (common in Intel and AMD servers) speak different machine code
 languages. A program compiled for one *architecture* will not run on the other,
 so builds run separately per target.
 
-Before the build can begin, *dependencies* - the libraries and tools the
-program relies on - must be fetched and/or built. Without Nix Seed, this
-happens on every run, even when dependencies have not changed.
+Before the build can begin, *dependencies* - the libraries and tools the program
+relies on - must be fetched and/or built. Without Nix Seed, this happens on
+every run, even when dependencies have not changed.
 
 Three costs:
 
 1. **Time.** The engineer waits.
 1. **Flow.** The wait breaks flow state. Flow state is having the entire system
-   architecture loaded into mental RAM. The friction between thought and code
-   is zero. It takes 20 minutes of deep focus to boot up. It takes a single
+   architecture loaded into mental RAM. The friction between thought and code is
+   zero. It takes 20 minutes of deep focus to boot up. It takes a single
    interruption to wipe it clean.
 1. **Compute.** The same setup cost - cash and energy - is paid repeatedly.
 
@@ -56,17 +56,17 @@ Nix Seed pre-builds dependencies and stores them in a *registry* - a software
 warehouse.
 
 Dependencies are packaged as *layers*: self-contained bundles, each identified
-by a fingerprint of its exact contents. When a build starts, the builder
-fetches the layers it needs and the build begins. No compilation. No fetching
-from dozens of upstream sources. The build starts in seconds.
+by a fingerprint of its exact contents. When a build starts, the builder fetches
+the layers it needs and the build begins. No compilation. No fetching from
+dozens of upstream sources. The build starts in seconds.
 
 The registry itself does not need to be trusted. Before a layer is used, its
-fingerprint is verified locally. A compromised registry cannot serve a
-malicious layer undetected: the fingerprint will not match, and the build will
-fail. Trust is in the math, not the service.
+fingerprint is verified locally. A compromised registry cannot serve a malicious
+layer undetected: the fingerprint will not match, and the build will fail. Trust
+is in the math, not the service.
 
-Registry location matters. Fetching layers across the internet adds latency.
-The registry should be co-located with the CI provider - on the same network,
+Registry location matters. Fetching layers across the internet adds latency. The
+registry should be co-located with the CI provider - on the same network,
 ideally in the same data centre - so transfers are fast local hops rather than
 long round trips.
 
@@ -91,8 +91,8 @@ changes, the digest changes. If the package does not match, the build fails.
 Nix Seed also produces three records alongside every build:
 
 - A *cryptographic signature* - a mathematical seal on the build output.
-  Produced with a private key held by the builder; anyone with the
-  corresponding public key can verify it.
+  Produced with a private key held by the builder; anyone with the corresponding
+  public key can verify it.
 - A *provenance record* - a signed statement of what was built, from what
   source, by which builder, and when.
 - An *SBOM* (Software Bill of Materials) - a complete ingredient list of every
@@ -103,10 +103,10 @@ Nix Seed also produces three records alongside every build:
 ### Problem: The Backdoored Compiler
 
 Source code is compiled by a *compiler* - another program. If the compiler
-itself has been secretly modified, it can insert a *backdoor* - hidden code
-that gives an attacker secret access to any system running the program - into
-itself and every program built from it. You cannot see the backdoor in the
-source code or the output.
+itself has been secretly modified, it can insert a *backdoor* - hidden code that
+gives an attacker secret access to any system running the program - into itself
+and every program built from it. You cannot see the backdoor in the source code
+or the output.
 
 This is not theoretical. Ken Thompson, co-creator of Unix,
 [demonstrated it in 1984](https://dl.acm.org/doi/10.1145/358198.358210): a
@@ -129,8 +129,8 @@ Who created the fingerprint, and can they be trusted?
 
 Every verification chain must end somewhere - a point that is accepted without
 further proof. This is the *trust anchor*: the root of the whole system. The
-three trust levels below differ in the anchor, the quorum, and how hard they
-are to compromise.
+three trust levels below differ in the anchor, the quorum, and how hard they are
+to compromise.
 
 ### Solutions
 
@@ -173,8 +173,8 @@ from more than half the network, which is a practical impossibility.
 Release rules are encoded in a *smart contract* on a public blockchain - a
 program that runs automatically and cannot be overridden. The contract enforces
 that a minimum number of independent builders must agree on the result. No
-person, company, or government can change the rules or approve a release
-outside of them.
+person, company, or government can change the rules or approve a release outside
+of them.
 
 - **Guarantees:** Rules enforced by mathematics, not by trust. See
   [Four Pillars](#four-pillars) below. A compromised builder cannot inject
@@ -190,9 +190,9 @@ Four properties make this guarantee hold:
 
 - *Full-Source Bootstrap.* The compiler chain is built from scratch from
   human-auditable source. No pre-compiled binary is trusted.
-- *Contract-Enforced Builder Independence.* The smart contract requires
-  builders to be from genuinely separate organisations and jurisdictions. One
-  party cannot control multiple "independent" builders to fake a quorum.
+- *Contract-Enforced Builder Independence.* The smart contract requires builders
+  to be from genuinely separate organisations and jurisdictions. One party
+  cannot control multiple "independent" builders to fake a quorum.
 - *No Central Actor.* No single entity - no Master Builder, no log service - can
   unilaterally approve a release. The contract replaces them all.
 - *Immutable Ledger.* The blockchain record cannot be altered or deleted. A
@@ -212,8 +212,8 @@ blocking builds - is **2-of-3**.
 ##### Does a Larger Quorum Help?
 
 Going from 2-of-3 to 4-of-5 doubles the number of independent compromises. If
-each independent compromise costs C, the total attack cost scales from C
-squared to C to the fourth. The cost roughly squares.
+each independent compromise costs C, the total attack cost scales from C squared
+to C to the fourth. The cost roughly squares.
 
 In practice the gain is larger than that:
 
@@ -248,17 +248,17 @@ ready-made results. If the package is already in the cache, it is downloaded
 instead of built.
 
 If two quorum builders both pull from the same binary cache, they are not
-building independently - they are both trusting the cache operator. If the
-cache is compromised, both builders attest the same malicious output. Quorum
-reaches agreement, but on tainted software.
+building independently - they are both trusting the cache operator. If the cache
+is compromised, both builders attest the same malicious output. Quorum reaches
+agreement, but on tainted software.
 
 ### Solution: Source-Only Builds
 
-In [Zero](#zero), each builder must build its entire *closure* - the full set
-of dependencies, resolved and built from source - with binary caches disabled.
-The build configuration is included in the *attestation* - a signed record of
-what was built, by whom, and from what inputs. A verifier can reject any build
-that used a shared cache.
+In [Zero](#zero), each builder must build its entire *closure* - the full set of
+dependencies, resolved and built from source - with binary caches disabled. The
+build configuration is included in the *attestation* - a signed record of what
+was built, by whom, and from what inputs. A verifier can reject any build that
+used a shared cache.
 
 ## Shared Cloud Infrastructure
 
@@ -302,8 +302,8 @@ across different customer accounts and organisations - is not independent.
 ### Solution: Layered Independence
 
 Builder independence requires separation at every layer: separate identity
-providers, separate key stores, and separate physical hardware. Builders
-sharing any one of these with another builder do not satisfy [Zero](#zero)'s
+providers, separate key stores, and separate physical hardware. Builders sharing
+any one of these with another builder do not satisfy [Zero](#zero)'s
 independence requirement.
 
 ## Nation State
@@ -402,15 +402,13 @@ what is in Git.
 
 If an engineer merges a malicious update - through compromise, deception, or
 error - Nix Seed will faithfully build, sign, and anchor the result. The
-cryptographic guarantees hold. The result is well-attested malware. Human
-review of dependency changes remains a critical security boundary that no
-automated system replaces.
+cryptographic guarantees hold. The result is well-attested malware. Human review
+of dependency changes remains a critical security boundary that no automated
+system replaces.
 
 ## Summary
 
 | | [Innocent](#innocent) | [Credulous](#credulous) | [Zero](#zero) |
-|---|---|---|---|
-| Build starts in seconds | Yes | Yes | Yes |
-| Single point of failure | Yes | Yes | No |
-| Resistant to high-level threats | No | No | Yes |
-| Cost | Free | Free | ~$3-9 per release |
+|---|---|---|---| | Build starts in seconds | Yes | Yes | Yes | | Single point
+of failure | Yes | Yes | No | | Resistant to high-level threats | No | No | Yes
+| | Cost | Free | Free | ~$3-9 per release |
