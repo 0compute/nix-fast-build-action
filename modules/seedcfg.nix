@@ -246,6 +246,17 @@ in
 
   options.flake.seedCfg = {
 
+    trust = mkOption {
+      default = "innocent";
+      type = types.enum [
+        "innocent"
+        "credulous"
+        "suspicious"
+        "zero"
+      ];
+      description = "Trust tier to enforce in build and verification flows.";
+    };
+
     fallbackRegistry = mkOption {
       default = "ghcr.io";
       type = types.str;
@@ -255,7 +266,19 @@ in
     rekor = mkOption {
       default = "https://rekor.sigstore.dev";
       type = types.str;
-      description = "URL of the Rekor transparency log.";
+      description = "Default Rekor log URL used by Innocent/Credulous.";
+    };
+
+    rekorLogs = mkOption {
+      default = [ ];
+      type = types.listOf types.str;
+      description = "Rekor log URLs for Suspicious mode (L logs in K-of-L).";
+    };
+
+    rekorQuorum = mkOption {
+      default = null;
+      type = with types; nullOr int;
+      description = "Required Rekor inclusion proofs in Suspicious mode; null means all configured logs.";
     };
 
     builders = mkOption {
